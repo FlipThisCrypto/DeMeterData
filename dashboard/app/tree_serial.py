@@ -41,34 +41,57 @@ def list_ports() -> list[PortInfo]:
 
 
 def _open(port: str) -> serial.Serial:
+    """Open the port WITHOUT asserting DTR/RTS, so we don't accidentally
+    reset the ESP32 via the USB-UART bridge's auto-reset circuit
+    (the CP210x / CH34x typically wire DTR -> IO0 and RTS -> EN through
+    a couple of transistors). Set the lines before opening so the
+    transition during `open()` is into the de-asserted state, not a pulse.
+    """
     try:
-        s = serial.Serial(
-            port=port,
-            baudrate=DEFAULT_BAUD,
-            timeout=settings().serial_timeout,
-            write_timeout=settings().serial_timeout,
-        )
+        s = serial.Serial()
+        s.port = port
+        s.baudrate = DEFAULT_BAUD
+        s.timeout = settings().serial_timeout
+        s.write_timeout = settings().serial_timeout
+        s.dtr = False
+        s.rts = False
+        s.open()
     except serial.SerialException as e:
         raise TreeError(f"could not open {port}: {e}") from e
-    # Drain anything the Tree was already printing (e.g. periodic
-    # sensor logs) so our request/response stays in sync.
+    # Brief settle + drain so any in-flight log line is consumed before
+    # we transmit a command.
+    time.sleep(0.12)
     s.reset_input_buffer()
     return s
 
 
-def _send_and_read_line(port: str, cmd: str, drain_extra: float = 0.05) -> str:
-    """Send `cmd\\n`, read one line back. Return the line stripped."""
+def _send_and_read_line(port: str, cmd: str) -> str:
+    """Send `cmd\\n`, read lines until we see one starting with OK/ERR.
+
+    Skips background log lines (sensor reports, wifi messages, etc.).
+    If the command times out, the error message includes the last few
+    non-matching lines we saw — invaluable when debugging.
+    """
     with _open(port) as s:
         s.write((cmd + "\n").encode("utf-8"))
         s.flush()
         deadline = time.time() + settings().serial_timeout
+        seen: list[str] = []
         while time.time() < deadline:
             line = s.readline().decode("utf-8", errors="replace").strip()
-            if line:
-                # Skip background log lines that don't look like a response.
-                if line.startswith("OK ") or line.startswith("OK") or line.startswith("ERR"):
-                    return line
-        raise TreeError(f"no response from {port} to {cmd!r}")
+            if not line:
+                continue
+            # A valid response is `OK`, `OK <rest>`, or `ERR <rest>`.
+            if line == "OK" or line.startswith("OK ") or line.startswith("ERR"):
+                return line
+            seen.append(line)
+            if len(seen) > 8:
+                seen = seen[-8:]
+        excerpt = " | ".join(seen) if seen else "<no output at all>"
+        raise TreeError(
+            f"no response from {port} to {cmd!r} within {settings().serial_timeout}s. "
+            f"Recent serial output: {excerpt}"
+        )
 
 
 def ping(port: str) -> bool:
