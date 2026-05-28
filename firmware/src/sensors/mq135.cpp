@@ -1,0 +1,52 @@
+// SPDX-License-Identifier: Apache-2.0
+#include "mq135.h"
+
+#include <Arduino.h>
+#include "pins.h"
+
+namespace orchard::sensors {
+
+bool MQ135Sensor::begin() {
+  pinMode(ORCHARD_PIN_MQ135_ADC, INPUT);
+  // 12-bit ADC on ESP32 (0..4095). 11dB attenuation lets us read up to ~3.3V.
+  analogReadResolution(12);
+  analogSetPinAttenuation(ORCHARD_PIN_MQ135_ADC, ADC_11db);
+  return true;
+}
+
+bool MQ135Sensor::read(JsonObject out) {
+  // Average a small burst to dampen noise.
+  constexpr int kSamples = 8;
+  uint32_t acc = 0;
+  for (int i = 0; i < kSamples; ++i) {
+    acc += analogRead(ORCHARD_PIN_MQ135_ADC);
+    delay(2);
+  }
+  const float raw = static_cast<float>(acc) / kSamples;
+
+  // Running baseline (alpha = 0.02 -> ~50-sample window).
+  if (!baseline_initialized_) {
+    baseline_ = raw;
+    baseline_initialized_ = true;
+  } else {
+    constexpr float kAlpha = 0.02f;
+    baseline_ = (1.0f - kAlpha) * baseline_ + kAlpha * raw;
+  }
+
+  // Relative deviation from baseline. Positive = worse air quality
+  // (more gas -> lower resistance -> higher analog signal on the divider).
+  const float deviation = raw - baseline_;
+  const float voltage = (raw / 4095.0f) * 3.3f;
+
+  out["adc_raw"]      = raw;
+  out["adc_baseline"] = baseline_;
+  out["adc_dev"]      = deviation;
+  out["voltage_v"]    = voltage;
+  return true;
+}
+
+}  // namespace orchard::sensors
+
+// Self-register.
+static orchard::sensors::AutoRegister<orchard::sensors::MQ135Sensor>
+    _mq135_register;

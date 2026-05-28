@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-05-27 — Phase 2: Tree firmware (initial)
+
+### Successes
+
+- **Phase 2 firmware committed.** PlatformIO + Arduino-ESP32 framework, targeting `esp32-s3-devkitc-1` (closest PlatformIO board match for Freenove ESP32-S3 — pin mappings line up).
+- **Modular sensor architecture working as designed.** `SensorRegistry` + static `AutoRegister<>` instances mean each driver is one `.cpp` + one registration line, no central if-else. Two active drivers landed: MQ-135 (analog air quality) and GPS NEO (UART NMEA, parsed by TinyGPSPlus).
+- **Identity layer.** Per-Tree `node_id` (16 random bytes, hex-encoded) and 32-byte signing secret generated on first boot, persisted to NVS via the `Preferences` library, never transmitted over the network. Secret only ever leaves the device over the local USB-serial console (via the `KEY` command) during registration.
+- **Signed POSTs.** Each `/readings` request carries `X-Orchard-Sig: HMAC-SHA256(secret, body)` using `mbedtls/md.h` (no extra crypto library).
+- **Serial-console provisioning.** Line-oriented commands (`PING`, `STATUS`, `NODE_ID`, `KEY`, `WIFI_SET`, `WIFI_CLEAR`, `ORACLE_SET`, `SAMPLE_NOW`, `REBOOT`) — Orchard View (Phase 4) will drive these; meanwhile they work fine from `pio device monitor`.
+- **HTTP OTA on `/ota`** + a `/health` endpoint. Dashboard pushes new firmware via a multipart POST. No auth on `/ota` — explicitly LAN-only.
+- **Partition table** for 8MB flash with two 3MB OTA app slots + NVS + small SPIFFS. 4MB-flash users swap to `default.csv`.
+
+### Decisions
+
+- **v1 signing = HMAC-SHA256, not ed25519.** Saves ~25KB flash + one library dependency. The oracle is the v1 trust boundary per ADR-0001, so the asymmetric-key step gives v1 no security benefit. The `identity::sign(...)` interface hides the scheme so v2 can swap to ed25519 (or whatever) without touching drivers. Recorded in `firmware/README.md` and `firmware/src/identity.h`.
+- **Stub drivers for AHT20 / BMP280 / BH1750 / PMS5003 deliberately not included.** No sensor wired = no honest way to test. Contributors use the existing `examples/sensor_driver/template` to add them when their hardware arrives.
+- **GPS on UART1** (GPIO 4/5, baud 9600). PMS5003 reserved for UART2 (GPIO 16/17). Matches the working setup.
+
+### Failures / open issues
+
+- *(none yet — firmware has not been flashed to a real Tree as of this commit. First flash + bring-up will go in the next LOG entry.)*
+
+### Carry-over questions (parked, not blocking)
+
+- *Verify Freenove ESP32-S3 flash size (4MB vs 8MB). Default in `platformio.ini` is 8MB; adjust if the board is 4MB.*
+- *Confirm GPS UART pin mapping against the actual board wiring (GPIO 4=RX, GPIO 5=TX). If the GPS already worked with the previous firmware, those are right.*
+
+---
+
 ## 2026-05-27 — $JUICE token details + sensitive-data hygiene
 
 ### Successes
