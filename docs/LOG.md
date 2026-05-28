@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-05-27 — First living Tree 🌱
+
+**Tree node_id: `5B9BB022649FA93D4091DA4BA40714B9`** (ESP32-WROOM-32U in the prototype enclosure, on COM4).
+
+### Successes
+
+- **The Orchard is alive on real hardware.** Firmware flashed successfully (995,552 bytes, 10.6s upload at 752 kbit/s, hash verified). Chip rebooted into our firmware and produced the expected first-boot output.
+- **First-boot identity generation worked end-to-end.** The two `nvs_get_blob NOT_FOUND` lines for `node_id` and `sign_key` are exactly what the firmware expects on a virgin chip — `identity::begin()` then generated fresh values and stored them in NVS. The Tree's `node_id` is now permanent: `5B9BB022649FA93D4091DA4BA40714B9`.
+- **Sensor registry self-registration works.** Both `MQ135Sensor` and `GpsNeoSensor` AutoRegister<> instances pushed themselves into the registry at static-init time without any central wiring. Both passed `begin()` (`active=yes`) and the registry reports `2 active sensor(s)`.
+- **WiFi manager and oracle client behave correctly on a virgin Tree.** WiFi: "no creds stored; idle. Use WIFI_SET over serial." Oracle: "WiFi not connected; skipping POST." Both are the right messages — no exceptions, no crashes, no silent failures.
+- **Dual-target build proven viable.** Same source tree, two PlatformIO envs (`freenove_esp32_wroom` + `freenove_esp32s3`), one of each chip family will land on a Tree as the project grows.
+
+### Failures / issues (encountered and resolved)
+
+- **Auto-reset wasn't working on the WROOM-32U.** First upload failed with `Wrong boot mode detected (0x13)` — DTR/RTS dance via CP210x didn't bring the chip into download mode. **Workaround:** manual BOOT-button-held + RESET-tap + BOOT-still-held, run upload, release BOOT after writing starts. Worked first try with the manual procedure.
+- **Wrong board assumption.** Memory and ADR initially recorded the prototype as ESP32-**S3**. Actually it's an ESP32-**WROOM-32U** (classic ESP32 with external antenna). Caught by esptool's chip-ID check before any bytes were written to the wrong chip. Memory + LOG corrected; platformio.ini now carries both envs with WROOM as the default.
+- **Banner mangled in my capture script.** First-line output came back as `=== Themware ===` because my Python `serial.read(in_waiting or 1)` loop dropped bytes during the initial boot burst (latency between `in_waiting` checks). The firmware print is correct — verified with `pio device monitor` directly. Future captures should use a single `s.read(s.in_waiting)` after a brief sleep, or just use `pio device monitor` interactively.
+
+### What this unlocks
+
+- **Phase 3 (oracle) is now a real need, not a stub.** The Tree is generating data and signing it; nothing to send it to until the oracle exists.
+- **Provisioning workflow is real.** Operators can already drive a Tree through `WIFI_SET`, `ORACLE_SET`, `STATUS`, `SAMPLE_NOW`, `REBOOT` via the serial console. Orchard View (Phase 4) will wrap this in a UI, but the underlying machinery is proven.
+
+### Carry-over questions (parked, not blocking)
+
+- *Auto-reset on the WROOM board — worth investigating the CP210x DTR/RTS timing? Or just document the manual BOOT-hold procedure as the standard for this board? (For now: documented procedure is fine.)*
+
+---
+
 ## 2026-05-27 — First flash attempt: C++17 fix landed, wrong-chip detection saved us
 
 ### Successes

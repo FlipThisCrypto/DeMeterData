@@ -1,6 +1,18 @@
-# firmware/ — Tree firmware (ESP32-S3)
+# firmware/ — Tree firmware (classic ESP32 + ESP32-S3)
 
-Modular firmware for a **Tree** — a deployed node in The Orchard. Built with PlatformIO and the Arduino-ESP32 framework, targeting the **Freenove ESP32-S3** dev board.
+Modular firmware for a **Tree** — a deployed node in The Orchard. Built with PlatformIO and the Arduino-ESP32 framework. Supports **two build targets**:
+
+| Build env             | Chip                                       | Notes                                                                                       |
+|-----------------------|--------------------------------------------|---------------------------------------------------------------------------------------------|
+| `freenove_esp32_wroom` *(default)* | Classic ESP32 (WROOM-32 / WROOM-32U) | The v1 prototype board. 4MB flash, no native USB, Serial via USB-UART bridge. LED on GPIO 2.   |
+| `freenove_esp32s3`    | ESP32-S3 (Freenove S3 dev board)           | Newer/optional. 8MB flash, native USB-CDC, LED on GPIO 48.                                  |
+
+```bash
+pio run                                           # builds the default (WROOM)
+pio run -e freenove_esp32s3                       # build for S3
+pio run -e freenove_esp32_wroom -t upload --upload-port COM4   # flash a WROOM
+pio run -e freenove_esp32s3 -t upload --upload-port COM7        # flash an S3
+```
 
 > **Vocabulary:** In code, the unit is a `node`; in user-facing copy, it's a **Tree**. See the [Glossary](../README.md#glossary).
 
