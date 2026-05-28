@@ -166,6 +166,7 @@ const OrchardView = (() => {
 
     const latest = data.latest;
     const mq = latest?.payload?.sensors?.mq135;
+    const bme = latest?.payload?.sensors?.bme280;
     const gps = latest?.payload?.sensors?.gps;
 
     if (mq) {
@@ -174,6 +175,13 @@ const OrchardView = (() => {
         makeField('voltage_v', mq.voltage_v?.toFixed?.(3) ?? mq.voltage_v) +
         makeField('baseline', mq.adc_baseline?.toFixed?.(1) ?? mq.adc_baseline) +
         makeField('deviation', mq.adc_dev?.toFixed?.(2) ?? mq.adc_dev);
+    }
+    if (bme) {
+      $('#bme280-data').innerHTML =
+        makeField('temperature', `${bme.temperature_c?.toFixed?.(1) ?? '—'} °C`) +
+        makeField('humidity',    `${bme.humidity_pct?.toFixed?.(1) ?? '—'} %`) +
+        makeField('pressure',    `${bme.pressure_hpa?.toFixed?.(2) ?? '—'} hPa`) +
+        makeField('i2c address', bme.i2c_addr ? `0x${bme.i2c_addr.toString(16)}` : '—');
     }
     if (gps) {
       $('#gps-data').innerHTML =

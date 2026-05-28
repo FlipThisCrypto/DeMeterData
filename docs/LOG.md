@@ -4,6 +4,66 @@
 
 ---
 
+## 2026-05-28 — Bring-up against the Freenove dual-purpose breakout
+
+### What happened (in order)
+
+- **Closed the loop in software but not in hardware.** Provisioned the Tree end-to-end via Orchard View: register → push WiFi → push oracle URL → SAMPLE_NOW. Three checkmarks, then the fourth came back with the Tree saying `[oracle] POST error: connection refused`. That message was the giveaway that the firmware was actually doing its job; the failure was host-side.
+- **Windows Firewall was blocking inbound 8000.** Tree on WiFi could reach the host IP but TCP got refused. Added a firewall rule: `New-NetFirewallRule -DisplayName "Orchard Oracle 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow -Profile Private` (admin PowerShell). Loop's host side then complete.
+- **But no POST ever landed.** Captured 12s of the Tree's serial → dead silence. Capture without DTR/RTS reset confirmed the chip wasn't booting at all — `rst:0x10 ... boot:0x13 ... flash read err, 1000 ... ets_main.c 371` repeating every ~370ms — classic ESP32 bootloop where the ROM bootloader can't read the second-stage bootloader from flash.
+- **Tracked it to a strapping pin.** "flash read err 1000" with `boot:0x13` is the textbook signature of **GPIO 12 (MTDI) pulled HIGH at boot** — the chip then mis-configures itself for 1.8V flash voltage when our 3.3V flash chip can't be read at that voltage.
+- **Re-flashed with explicit `dio` + 40MHz** as a flash-mode workaround. The PlatformIO `esp32dev` defaults of `qio` + 80MHz are marginal on some Freenove WROOM boards. No effect on the bootloop — confirming the issue is strap, not mode.
+- **Richard's debugging insight cracked it open:** "When I unplugged it from the breakout, it was able to read." So the chip itself is fine; the breakout PCB has something tied to GPIO 12 that pulls it HIGH at boot.
+- **And:** "I gave you the ESP32-S3 labels, my bad." The breakout is a **Freenove Breakout Board for ESP32/ESP32-S3 v1.1** — every header hole has TWO silkscreened labels, one for ESP32-S3 and one for classic ESP32. The user's wiring was done against the S3 column but the chip installed is a WROOM-32 (classic).
+
+### Decoded the pin map from the photos
+
+ESP32-side GPIOs actually exposed on this breakout:
+
+- **Left header**: VP(36), VN(39), 34, 35, 32, 33, 25, 26, 27, 14, 12, 13
+- **Right header**: TX(1), RX(3), 23, 22, 21, 19, 18, 5, 4, 0, 2, 15
+- **NOT exposed**: 16, 17 (the textbook UART2 defaults! Forced to remap.) Also 6-11 (internal SPI flash, can't use anyway).
+- Rows labeled `*` on the ESP32 column are NC on this side — those positions only connect when an S3 is socketed.
+
+The current user wiring:
+
+| Wire | S3-column label (what they read) | ESP32-column label | Actually connected to on this WROOM? |
+|------|---------------------------------|---------------------|--------------------------------------|
+| GPS Tx → Tree RX  | `36` | `*` | **Nothing** (NC on ESP32 side) |
+| GPS Rx ← Tree TX  | `35` | `*` | **Nothing** (NC on ESP32 side) |
+| MQ-135 analog     | `6`  | `34` | **GPIO 34** — correct by coincidence ✓ |
+| BME280 SDA (yellow)| `21` | `21` | **GPIO 21** ✓ |
+| BME280 SCL (green) | `22` | `22` | **GPIO 22** ✓ |
+
+So GPS hasn't actually been wired into the chip *at all* — anything we thought we saw earlier was either an S3 chip in this position, or floating-pin noise. MQ-135 + BME280 are correctly wired on the ESP32 column.
+
+### Fixes shipped in this commit
+
+- **`firmware/platformio.ini`** — under `[env:freenove_esp32_wroom]`, build-flag overrides: `-D ORCHARD_PIN_GPS_RX=18 -D ORCHARD_PIN_GPS_TX=19`. GPS UART moves off the inaccessible S3-style holes onto two real output-capable pins in the ESP32 column right header. S3 env is untouched (still 4/5).
+- **`firmware/src/sensors/bme280.{h,cpp}`** — new driver, self-registering via `AutoRegister<>`. Tries I2C address `0x76`, falls back to `0x77`. Reports `temperature_c`, `humidity_pct`, `pressure_hpa`, `i2c_addr`. Returns false from `begin()` if neither address responds, so it auto-skips when not present.
+- **`Adafruit BME280 Library@^2.2.4`** added to `[env].lib_deps` (pulls in Adafruit Unified Sensor + BusIO as transitive deps).
+- **`dashboard/.../tree.html`** — added a third sensor card for BME280.
+- **`dashboard/.../app.js`** — render `temperature_c / humidity_pct / pressure_hpa / i2c_addr` into the BME280 card.
+
+### Still required from the operator (Richard)
+
+1. **Physically move the GPS wires** from the S3-column `36`/`35` holes to the ESP32-column **`18`** (Tree RX from GPS TX) and **`19`** (Tree TX to GPS RX) holes — both in the right header.
+2. **Burn eFuse** to permanently lock flash voltage to 3.3V on this specific chip, so GPIO 12 stops being a strap and the breakout's indicator LED on that row stops triggering bootloops:
+   ```
+   python -m esptool --port COM4 --before no-reset set_flash_voltage 3.3V
+   ```
+   (Chip must be in download mode: BOOT held, RESET tapped, BOOT still held.)
+3. **Re-flash** the WROOM env (same BOOT-button procedure) — picks up the new GPS pins + the new BME280 driver.
+4. **Watch the live view** at `/tree/<node_id>` — MQ-135 + BME280 + GPS should all populate within 60 seconds.
+
+### Lessons / observations worth pinning
+
+- Dual-purpose breakouts with "[S3 label] / [ESP32 label]" silkscreens are a sharp edge. Future docs should specify *which column* a pin number refers to whenever giving wiring instructions.
+- `flash read err, 1000` + `boot:0x13` repeating ≈ GPIO 12 high at boot. Reach for the eFuse `set_flash_voltage 3.3V` fix when this happens on a board you can't easily depopulate.
+- Self-registering sensors continue to pay off — adding BME280 was just dropping in two files. No central registration, no main.cpp change.
+
+---
+
 ## 2026-05-27 — Phase 4: Orchard View dashboard
 
 ### Successes
