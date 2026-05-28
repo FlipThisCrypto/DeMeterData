@@ -1,10 +1,18 @@
+<p align="center">
+  <img src="docs/photos/The%20Orchard%20LOGO.png" alt="The Orchard — $JUICE" width="280">
+</p>
+
 # The Orchard
 
 > An open-source environmental DePIN (Decentralized Physical Infrastructure Network) on the [Chia blockchain](https://www.chia.net/). Plant a low-cost ESP32-S3 **Tree**, harvest verifiable environmental data, earn **$JUICE**.
 
 **Status:** Proof of concept. Pre-alpha. Things will break. Help us fix them.
 
-![Initial prototype — ESP32-S3 in waterproof enclosure with MQ-135 air sensor and GPS](docs/photos/01-initial-prototype.jpg)
+<p align="center">
+  <img src="docs/photos/01-initial-prototype.jpg" alt="Initial prototype — ESP32-S3 in waterproof enclosure with MQ-135 air sensor and GPS" width="420">
+  <br>
+  <em>The first Tree — Freenove ESP32-S3 + MQ-135 + GPS in a clear ABS enclosure, Mount Washington, KY.</em>
+</p>
 
 ---
 
