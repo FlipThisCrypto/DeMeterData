@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-05-27 — First flash attempt: C++17 fix landed, wrong-chip detection saved us
+
+### Successes
+
+- **PlatformIO toolchain bootstrap.** Fresh install on Python 3.14. `python -m platformio` works (pio.exe ended up in `%APPDATA%\Python\Python314\Scripts`, not on PATH — fine, we just use the `python -m` form). Espressif32 platform 6.13.0 + xtensa toolchain + Arduino-ESP32 v3.20017 framework downloaded and cached (~300MB, one-time).
+- **First compile uncovered a real bug.** sensor.h used `std::make_unique` (C++14+) but Arduino-ESP32 v2.x defaults to gnu++11. Fix: `build_unflags = -std=gnu++11` + `build_flags = -std=gnu++17` in `platformio.ini`. After the change, full clean build succeeds — every translation unit compiles, archive links, firmware.bin gets generated. **RAM 14.5% used, Flash 30.3% used** — lots of room for more sensors and features.
+- **esptool's chip-ID guard worked exactly as designed.** Caught the wrong-target situation before writing a single byte to flash. Zero bricking risk on the wrong-board attempt.
+
+### Failures / issues
+
+- **`std::make_unique` C++14 dependency.** Already fixed (see above). Lesson: when writing firmware that uses standard-library features, explicitly set the language standard in `platformio.ini` rather than relying on the framework's defaults — Arduino-ESP32 v2.x is conservative.
+- **Wrong board on COM6.** esptool refused: `This chip is ESP32, not ESP32-S3`. The board on COM6 (Silicon Labs CP210x bridge) is a **classic ESP32**, not the Freenove ESP32-S3 we built firmware for. Our target is the S3 — the one in the prototype enclosure, using a CH343 bridge.
+- **USB driver state was confusing.** WCH CH343 driver showed `Status: Unknown` initially even with `wch.cn / ch343ser.inf` registered as a system driver. Resolution wasn't a driver reinstall — it was unplug + replug the board to force re-enumeration. CH343 board has shown up at COM17 in one session and not at all in others, suggesting an intermittent USB connection (cable or socket).
+
+### Decisions
+
+- **Target C++17 for the firmware permanently.** Modern features (`std::make_unique`, `std::optional`, structured bindings, `if constexpr`) are worth the small compile-time overhead. Documented in `platformio.ini` comments.
+- **No build env for classic ESP32 yet.** The firmware leans on USB-CDC-on-boot and S3-only behaviors. Adding a classic-ESP32 env is real work (pin remapping, no native USB) and we don't need it for v1. If a contributor wants to support classic ESP32 later, they add `[env:esp32_classic]` and gate the S3-specific bits with `#if CONFIG_IDF_TARGET_ESP32S3`. Filing as a possible v1.x add.
+
+### Carry-over questions (parked, not blocking)
+
+- *What's on the classic ESP32 (COM6)? Project / use case for it? Worth supporting as a non-S3 Tree variant later?*
+- *CH343 enumeration intermittency — bad cable, flaky USB-C socket, or PC USB port? Try a known-good cable first; if still flaky, the board's USB-C socket may need reflowing.*
+
+---
+
 ## 2026-05-27 — GitHub repo renamed `DeMeterData` → `the-orchard`
 
 ### Successes
