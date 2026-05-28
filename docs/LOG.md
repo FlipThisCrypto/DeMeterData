@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-05-27 — Phase 3: Oracle service
+
+### Successes
+
+- **Oracle service implemented end-to-end.** FastAPI 0.136 + SQLAlchemy 2.0 + Pydantic 2.12 + pydantic-settings. All on Richard's Python 3.14 install. Endpoints: `/`, `/health`, `/register`, `/readings` (POST + GET-by-node), `/nodes`, `/nodes/{id}`, `/uptime/{node}/{season}`.
+- **Six smoke tests, all passing in 1.17s.** Covers: service identification, register (new + duplicate-same-key + duplicate-different-key conflict), POST with unknown node (404), POST with bad signature (401), POST happy path → retrieve → uptime bucket increment, uptime for unknown node (404).
+- **HMAC-SHA256 verification matches the Tree firmware exactly.** Server reads raw bytes via `request.body()` (no JSON re-parsing before signature check, which would have broken the bytes), computes HMAC with stored signing key, constant-time compares with the `X-Orchard-Sig` header.
+- **v1 Season math is in.** Day-aligned UTC Seasons starting from a configurable genesis date (default 2026-05-27). Phase 5 will swap `seasons.py` for Chia-block-aligned Seasons — the rest of the oracle treats `(node_id, season)` as opaque.
+- **`oracle/data/` auto-creates on first run.** SQLite DB file lands at `oracle/data/orchard.db`. Directory is already covered by `.gitignore`.
+
+### Failures / issues (encountered and resolved)
+
+- **SQLite `:memory:` connections don't share state.** First test run failed with `no such table: nodes` even though `Base.metadata.create_all()` ran. Root cause: with `sqlite:///:memory:`, *each new connection gets its own empty database*. Schema was created on one connection, sessions used a different one. **Fix:** use `StaticPool` in the test engine so all sessions reuse a single connection. Production path is unaffected (uses file-backed SQLite).
+- **Python 3.14 + new packages:** worth noting — fastapi 0.136, sqlalchemy 2.0.50, pydantic 2.12 all install cleanly on 3.14 without complaints. No version pinning gymnastics needed.
+
+### Decisions
+
+- **No NFT check on `/register` in v1.** Anyone with a Tree's `(node_id, signing_key_hex)` pair can register. Phase 6 will add Orchard Pass verification (operator must hold the credential NFT on the declared wallet). Documented in the oracle README.
+- **Reading payload stored as raw JSON text + extracted GPS columns.** Full payload preserved for forensics + future-proofing; common fields (`gps_lat/lon/fix`, `fw_version`, `tree_ts_ms`) extracted into indexable columns for queries.
+- **`/readings` returns 202 Accepted, not 200.** Semantically, the server has accepted the data and queued it for storage; the Tree doesn't need to wait on durability confirmation. Matters when we eventually add async persistence.
+
+### What this unlocks
+
+- **End-to-end data path is live.** Tree → signed POST → oracle SQLite → retrieve. Provision the existing Tree (COM4) over serial (`WIFI_SET`, `ORACLE_SET`) and the first real reading will flow.
+- **Phase 4 (Orchard View)** can start — it has real endpoints to call.
+- **Phase 5 (Season attestation writer)** can start — it has real uptime data to roll up.
+
+---
+
 ## 2026-05-27 — First living Tree 🌱
 
 **Tree node_id: `5B9BB022649FA93D4091DA4BA40714B9`** (ESP32-WROOM-32U in the prototype enclosure, on COM4).
