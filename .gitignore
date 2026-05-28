@@ -77,6 +77,14 @@ docs/Juice Token.docx
 docs/*token*.docx
 docs/token/*-private.*
 
+# Driver installers operators may download into the tree (Windows USB-UART drivers).
+# Not source — don't commit. Common naming patterns:
+**/CH34*SER.EXE
+**/CH34*SER.exe
+**/CP210x*Setup*.exe
+**/CP210x*Setup*.EXE
+**/FT_Prog*.exe
+
 # --- Runtime data ---
 *.db
 *.sqlite
