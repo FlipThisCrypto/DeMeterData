@@ -1,0 +1,89 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# --- PlatformIO / Arduino / ESP32 ---
+firmware/.pio/
+firmware/.vscode/
+firmware/.pioenvs/
+firmware/.piolibdeps/
+firmware/lib/readme.txt
+firmware/build/
+firmware/CMakeListsPrivate.txt
+firmware/CMakeCache.txt
+firmware/CMakeFiles/
+*.elf
+*.bin
+*.hex
+
+# --- Node (future dashboard frontend bits) ---
+node_modules/
+npm-debug.log
+yarn-error.log
+.pnpm-store/
+
+# --- IDE / Editors ---
+.idea/
+.vscode/*
+!.vscode/settings.example.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Secrets / credentials (NEVER commit these) ---
+*.pem
+*.key
+*.cert
+*.crt
+*_secret*
+secrets/
+config/local.*
+chia_keys.txt
+mnemonic.txt
+wallet_fingerprint.txt
+
+# Token creation log (contains operator-private wallet fingerprint + wallet id)
+docs/Juice Token.docx
+docs/*token*.docx
+docs/token/*-private.*
+
+# --- Runtime data ---
+*.db
+*.sqlite
+*.sqlite3
+data/
+logs/
+*.log
+
+# --- Claude / dev tooling local state ---
+.claude/
