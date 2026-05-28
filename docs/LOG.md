@@ -4,6 +4,67 @@
 
 ---
 
+## 2026-05-28 — 🌱 End-to-end loop closed on real hardware
+
+**Tree node_id: `5B9BB022649FA93D4091DA4BA40714B9`** — running fw 0.1.0 (new firmware with BME280 driver + GPS on GPIO 18/19), POSTing signed readings every 60 seconds, oracle storing them in SQLite, Orchard View polling and rendering them in the browser. **The full v1 proof of concept works.**
+
+### First nine real readings (UTC, 60s cadence)
+
+```
+2026-05-28T20:43:27.781196
+2026-05-28T20:44:27.683225
+2026-05-28T20:45:27.666578
+2026-05-28T20:46:27.580423
+2026-05-28T20:47:27.594094
+2026-05-28T20:48:27.763037
+2026-05-28T20:49:27.667321
+2026-05-28T20:50:27.637140
+2026-05-28T20:51:27.614515
+```
+
+Cadence is rock-solid — the firmware's `ORCHARD_SAMPLE_INTERVAL_MS = 60000` loop is honored to the second.
+
+### What's working end-to-end
+
+- **Tree firmware on real ESP32-WROOM-32U** — boots cleanly, identity persists in NVS, all three sensor drivers self-register, samples on schedule, signs each payload with HMAC, POSTs over WiFi.
+- **WiFi connection** — Tree's `wifi_mgr` connects to `FlipThisCrypto` SSID with rssi -43 to -48 dBm.
+- **Oracle FastAPI** — listening on 0.0.0.0:8000, accepts signed POSTs (HTTP 202), stores in SQLite at `oracle/data/orchard.db`.
+- **Per-Tree HMAC verification** — every POST signature verifies against the secret captured at registration.
+- **Orchard View dashboard** — home page shows Tree in the registered-nodes list, live view polls every 5 seconds and renders MQ-135, BME280, and GPS cards plus a recent-readings table.
+- **Per-hour uptime tracking** — first Season Hour bucket populated; uptime shows "1 / 24 hours" within the first hour.
+
+### Sensors connected vs. reported
+
+- **MQ-135** — not wired this session; firmware reports floating-pin reads (mostly 0.0 with occasional spikes). Expected. Active=yes because the analog driver has no presence probe.
+- **BME280** — not wired this session; driver's `begin()` probed both 0x76 and 0x77, got no ack, returned false → registry marks inactive → no card data. **Correct graceful absent-sensor behavior.**
+- **GPS NEO-6M with corded antenna** — wired (VCC=5V via breakout, GND via breakout, TX→chip GPIO 18, RX→chip GPIO 19). Active=yes from the registry but `satellites: 0` and `age_ms: 0` — meaning the chip's UART RX is receiving zero NMEA. Separate investigation (probably antenna unplugged, TX/RX swapped, or the GPS's onboard 3V3 regulator not seeing 5V cleanly). Doesn't block the loop.
+
+### Failures / issues encountered and resolved on this session
+
+- **Two `tests/test_basic.py`** modules colliding in pytest's importer — fixed with `pyproject.toml` `--import-mode=importlib` + rename to `test_oracle.py` / `test_dashboard.py`.
+- **`std::make_unique` requires C++14** but Arduino-ESP32 v2.x defaults to gnu++11 — fixed with `-std=gnu++17` + `-build_unflags=-std=gnu++11`.
+- **Wrong board target** — the prototype is ESP32-WROOM-32U (classic), not S3. esptool's chip-ID guard caught the mismatch before any bytes were written.
+- **Dual-target build env added** — `freenove_esp32_wroom` (default) + `freenove_esp32s3`. Status LED differs (GPIO 2 vs 48); GPS pins differ via build flags (18/19 vs 4/5).
+- **Auto-reset wasn't triggering download mode** on the WROOM board — documented BOOT-button-hold procedure as the standard.
+- **DTR/RTS pulse on dashboard's serial-port open was rebooting the chip** — fixed with `dtr=False, rts=False` set before opening the port in `tree_serial.py`.
+- **`flash read err, 1000` bootloop** on the breakout — initially diagnosed as GPIO 12 strapping pin. eFuse summary later showed `XPD_SDIO_FORCE=True` already set — GPIO 12 was a red herring. With all sensors disconnected the chip boots cleanly on the breakout; the actual bootloop trigger was one of the sensor wires being on a misread S3-column pin label.
+- **Dual-purpose breakout silkscreen** — Freenove "Breakout Board for ESP32/ESP32-S3 v1.1" has TWO labels per hole (S3 column + ESP32 column). Operator was reading the S3 column but had a classic ESP32 installed. The GPS wires were going to NC holes on the ESP32 side. Re-routed: GPS through chip pins 18/19 directly, power via the breakout's 5V/GND.
+- **Windows Firewall blocking inbound 8000** — added `New-NetFirewallRule ... -LocalPort 8000 -Profile Private`, later added a Public-profile rule too in case the WiFi adapter ever gets reclassified.
+- **Tree was POSTing to `192.168.1.10` (the `.env.example` placeholder)** — pydantic-settings reads `dashboard/.env`, not `dashboard/.env.example`. Operator edited the wrong file → dashboard used hardcoded default → wrong URL pushed to Tree at provisioning. Fixed by `ORACLE_SET http://192.168.0.223:8000/readings` over serial. Operator separately copied `.env.example` → `.env` so future provisionings push the right URL.
+
+### Decisions
+- **Phase 9 (breakout integration task) closes with the loop closed.** GPS data path is still pending but is a sensor-side investigation, not blocking.
+- **`.env.example` is the template; `.env` is what gets read.** This needs to be more prominent in the dashboard README quickstart.
+- **The boot-mode auto-reset issue and the dual-label breakout are both worth documenting** in `docs/wiring/` as gotchas for the next operator.
+
+### Carry-over (next session)
+- *GPS troubleshooting*: confirm antenna connection, check GPS LED state, try swapping TX/RX wires (module-perspective vs chip-perspective).
+- *MQ-135 / BME280 reconnect*: rewire after GPS works to validate I2C + analog paths.
+- *`received_at` UTC serialization*: timestamps come back without an explicit `Z` / `+00:00` suffix. JS `Date.parse()` then treats them as local time, which is why the "Alive" indicator can disagree with "Last reading: just now". Small fix in the oracle response model.
+- *Dashboard quickstart docs* — make it explicit that you must `cp .env.example .env`.
+
+---
+
 ## 2026-05-28 — Bring-up against the Freenove dual-purpose breakout
 
 ### What happened (in order)
