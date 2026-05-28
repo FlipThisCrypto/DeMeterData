@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-05-27 — GitHub repo renamed `DeMeterData` → `the-orchard`
+
+### Successes
+
+- **Repo renamed in GitHub Settings** by Richard. New canonical URL: https://github.com/FlipThisCrypto/the-orchard. GitHub auto-redirects the old `DeMeterData` URL, so any existing clones, badges, or external links keep resolving.
+- **Local `origin` remote updated** to the new URL via `git remote set-url`. `git fetch origin` works against the new name. No history rewrite needed.
+- **Doc references swept.** README quickstart, CONTRIBUTING.md, ADR-0001, and the `project_orchard_overview` memory file now use the new URL.
+
+### Notes
+
+- **Earlier LOG entries are deliberately not rewritten.** When the kickoff entry says "Public GitHub at .../DeMeterData", that's the truth as of that timestamp. Editing history breaks the value of the LOG.
+- **`origin/HEAD`** on the new repo still points at `main` — no remote-side cleanup needed.
+
+---
+
 ## 2026-05-27 — Phase 2: Tree firmware (initial)
 
 ### Successes

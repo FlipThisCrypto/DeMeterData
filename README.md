@@ -130,7 +130,7 @@ User-facing copy uses brand names. Code uses technical equivalents. This table i
 
 ```bash
 # 1. Clone
-git clone https://github.com/FlipThisCrypto/DeMeterData.git the-orchard
+git clone https://github.com/FlipThisCrypto/the-orchard.git
 cd the-orchard
 
 # 2. Install dashboard + oracle (Python 3.11+)

@@ -64,7 +64,7 @@ One signed record per node per Season: `{node_id, Season, hours_online, data_has
 
 ### 8. Repo: public GitHub from day one, Apache 2.0
 
-Public at https://github.com/FlipThisCrypto/DeMeterData. Apache 2.0 license.
+Public at https://github.com/FlipThisCrypto/the-orchard (originally created as `DeMeterData`, renamed 2026-05-27 — GitHub redirects the old URL). Apache 2.0 license.
 
 **Why:** Maximum community signal. Patent grant in Apache 2.0 protects contributors and integrators of this infrastructure project.
 

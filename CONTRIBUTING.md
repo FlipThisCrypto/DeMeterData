@@ -26,7 +26,7 @@ This document covers: how to set up a dev environment, the code style we follow,
 ### Get the code
 
 ```bash
-git clone https://github.com/FlipThisCrypto/DeMeterData.git the-orchard
+git clone https://github.com/FlipThisCrypto/the-orchard.git
 cd the-orchard
 python -m venv .venv
 # Windows
