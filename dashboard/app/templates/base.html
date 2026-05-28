@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Orchard View{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">The Orchard</span>
+      <span class="brand-sub">/ View</span>
+    </div>
+    <nav>
+      <a href="{{ url_for('dashboard.index') }}">Trees</a>
+      <a href="{{ url_for('provision.provision_page') }}">Plant a Tree</a>
+    </nav>
+  </header>
+  <main>{% block body %}{% endblock %}</main>
+  <footer>
+    The Orchard — open-source DePIN on Chia.
+    <a href="https://github.com/FlipThisCrypto/the-orchard" target="_blank">GitHub</a>
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

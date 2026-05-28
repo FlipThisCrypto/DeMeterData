@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-05-27 — Phase 4: Orchard View dashboard
+
+### Successes
+
+- **Orchard View MVP shipped.** Flask 3.1 + vanilla JS + a hand-rolled dark CSS theme (no framework deps). Three pages — home (oracle status + Tree list), Plant a Tree (provisioning wizard), live Tree view (5-second polling).
+- **End-to-end provisioning wizard works.** Single-page flow: pick a COM port → identify Tree (PING/NODE_ID/KEY/STATUS over serial) → fill in label/wallet/SSID/password/oracle URL → click Provision → dashboard sequences (register with oracle, WIFI_SET, ORACLE_SET, SAMPLE_NOW), shows status per step, redirects to the live view. No page reloads, no juggling of multiple windows.
+- **Live view shows the data we promised.** MQ-135 (raw ADC, voltage, baseline, deviation), GPS (fix, satellites, lat/lon, altitude, UTC), uptime hours this Season, alive/stale indicator based on age of last reading. Recent-readings table for context.
+- **11 dashboard tests + 6 oracle tests = 17 passing in 1.65s.** Tests stub out `tree_serial` and `oracle_client` so they run hermetically — no actual serial port, no actual oracle process needed.
+
+### Failures / issues (encountered and resolved)
+
+- **Pytest module-name collision.** First all-tests run failed: both components had `tests/test_basic.py` files, and pytest's default `prepend` import mode treats `tests/` as a top-level package — so it tried to import two modules at the same dotted path. **Fix:** rename to `test_oracle.py` and `test_dashboard.py`, remove the `__init__.py` files inside both `tests/` dirs, add a root `pyproject.toml` with `--import-mode=importlib` and explicit `testpaths`. Both unique test files now found, no conflict.
+
+### Decisions
+
+- **Dashboard talks to the oracle via HTTP only.** No shared DB, no shared in-process imports. Means the dashboard could run on a different host than the oracle later without any code changes.
+- **One serial-open per command** in `tree_serial.py`, instead of a persistent connection. Slower per-call but stateless across Flask requests — and provisioning is a once-per-Tree operation, so the latency is invisible.
+- **Polling (5s) instead of SSE/WebSocket** for live updates. Adds zero infrastructure, works through any reverse proxy, fine for the 60s sample cadence. Can upgrade later if cadence drops below polling interval.
+- **Brand colors:** orange (`#ff8c42`, the JUICE accent) for primary actions, fresh green (`#8fde6e`) for OK/active states. Dark background for long sessions. No CSS framework — kept the entire stylesheet small enough to read in one pass (~150 lines).
+
+### What's deferred
+
+- **OTA upload UI.** Use `curl -F` against the Tree's `/ota` endpoint until Phase 4.1.
+- **I2C bus scan / UART signature sniff** for sensor auto-detect — requires the dashboard to take over the serial port continuously, which doesn't fit the v1 one-shot-command model.
+- **Multi-Tree admin actions** (delete, rename, force re-flash) — wait until there's a real fleet.
+- **Orchard Pass NFT gate on `/register`** — that's Phase 6 (oracle-side check).
+
+### What this unlocks
+
+- **The full v1 loop is now demonstrable in real time.** Tree (firmware) → POST → oracle → SQLite, **with a browser tab open at `/tree/<node_id>` watching it happen**. That's the "close the loop where I can see it" milestone Richard asked for.
+
+---
+
 ## 2026-05-27 — Phase 3: Oracle service
 
 ### Successes

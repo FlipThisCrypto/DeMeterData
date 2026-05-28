@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Orchard View — Trees{% endblock %}
+{% block body %}
+
+<h1>Trees</h1>
+
+<section class="card">
+  <h2>Oracle</h2>
+  {% if oracle_ok %}
+    <p class="ok">Connected — version {{ oracle_info.get('version', '?') }}, Season {{ oracle_info.get('current_season') }}</p>
+    <p class="muted">Server time: {{ oracle_info.get('now_utc') }}</p>
+  {% else %}
+    <p class="err">Oracle unreachable.</p>
+    {% if error %}<pre class="err">{{ error }}</pre>{% endif %}
+    <p class="muted">Start the oracle in another terminal:</p>
+    <pre>python -m oracle.app.main</pre>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Registered Trees</h2>
+  {% if nodes %}
+    <table class="trees">
+      <thead>
+        <tr><th>node_id</th><th>label</th><th>fw</th><th>last reading</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for n in nodes %}
+        <tr>
+          <td class="mono">{{ n.node_id[:16] }}…</td>
+          <td>{{ n.label or '—' }}</td>
+          <td>{{ n.fw_version or '—' }}</td>
+          <td>{{ n.last_reading_at or 'never' }}</td>
+          <td><a class="btn" href="{{ url_for('tree.tree_page', node_id=n.node_id) }}">Live →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No Trees registered yet.</p>
+    <p><a class="btn primary" href="{{ url_for('provision.provision_page') }}">Plant your first Tree →</a></p>
+  {% endif %}
+</section>
+
+{% endblock %}

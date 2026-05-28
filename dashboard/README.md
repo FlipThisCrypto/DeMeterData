@@ -1,34 +1,67 @@
 # dashboard/ — Orchard View (local Flask dashboard)
 
-**Orchard View** is the local web UI you run on your PC. Connects to a USB-attached Tree and to the local oracle. Designed for the "I just plugged in my first Tree" experience: one command, one browser tab, everything visible.
+**Orchard View** is the local web UI you run on your PC. It does two things:
 
-## Why this is its own component
+1. **Plant a Tree** — walks you through end-to-end provisioning of a newly-flashed Tree: pick its USB-serial port, identify it, register it with the oracle, push WiFi credentials and oracle URL, trigger the first sample. Everything happens in a single page with live status per step.
+2. **Live Tree view** — polls the oracle every few seconds and shows the latest signed reading from a Tree: MQ-135 air quality, GPS fix + coordinates, recent readings table, and uptime in the current Season.
 
-Setup tooling has different lifecycle and dependencies than the oracle (the oracle needs to be running 24/7; the dashboard is opened by a human, used, closed). Splitting them keeps each lean.
+> **Vocabulary:** Trees, Seasons, Orchard Passes. Code uses `node`/`season`/`pass`. See the [Glossary](../README.md#glossary).
 
-## Planned pages (Phase 4)
+## Pages
 
-1. **Connect** — pick a USB serial port. Auto-detect ESP32-S3.
-2. **Scan** — show I2C bus contents (auto-map known addresses to sensor types), sniff UART for known protocol signatures (NMEA, PMS5003), and surface a sensor-declaration form for analog/digital sensors that can't be auto-detected.
-3. **Live** — current readings from each sensor, GPS map, uptime, last attestation.
-4. **WiFi** — push SSID/password to the ESP32 over serial.
-5. **OTA** — upload a new firmware binary and trigger an OTA update.
-6. **Register Tree** — wizard for binding this Tree to a wallet. Verifies the wallet holds an **Orchard Pass** NFT.
-7. **Admin** — list of all registered Trees, status, Season harvest history.
+| URL              | What                                                              |
+|------------------|-------------------------------------------------------------------|
+| `/`              | Home — oracle status + list of registered Trees                   |
+| `/provision`     | Wizard: identify a Tree over USB, configure it, send it to work   |
+| `/tree/<node>`   | Live view for a Tree (5s polling)                                 |
+| `/api/...`       | JSON endpoints used by the pages (see `app/routes/api.py`)        |
 
-## Design principle: copy-paste deployable
+## Quick start
 
-Anyone replicating this build should be able to:
+Run from the repo root:
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
+# 1. Install (in the same .venv as the oracle is fine)
 pip install -r dashboard/requirements.txt
+
+# 2. (Optional) override defaults
+cp dashboard/.env.example dashboard/.env
+# edit dashboard/.env — point ORCHARD_VIEW_TREE_ORACLE_URL at your LAN IP
+# so a Tree on WiFi can reach the oracle.
+
+# 3. Run (the oracle should already be running in another terminal)
 python -m dashboard.app
+# -> http://127.0.0.1:5000/
 ```
 
-…and have a working dashboard. No system-level dependencies beyond Python.
+Open the URL in any browser. If the oracle is running at `http://127.0.0.1:8000` (the default), the home page will say "Oracle: Connected"; if not, it'll show the start command for the oracle.
+
+## Closing the loop with a real Tree
+
+1. Flash the firmware (`firmware/`) and plug the Tree into USB. (See [firmware/README.md](../firmware/README.md).)
+2. Start the oracle (`python -m oracle.app.main`).
+3. Start Orchard View (`python -m dashboard.app`).
+4. Open `http://127.0.0.1:5000/provision` and click **Plant a Tree**.
+5. Pick the Tree's COM port, click **Identify Tree** — node_id, fw version, and current status come back.
+6. Fill in WiFi SSID / password, optional label / wallet address, and the oracle URL (must be reachable from the Tree on the LAN — not `127.0.0.1`).
+7. Click **Provision Tree**. The dashboard walks the four steps: register with oracle → push WiFi → push oracle URL → SAMPLE_NOW. Each step shows status in real time.
+8. You're redirected to `/tree/<node_id>`. The live view starts polling the oracle every 5 seconds. The first signed reading should land within ~30 seconds (Tree boots, joins WiFi, sends).
+
+## Smoke tests
+
+```bash
+pytest dashboard/tests/
+```
+
+Tests cover: home page with oracle up and down, provision page renders, tree page 404 vs found, the API endpoints with the oracle and serial layers mocked.
+
+## What's deliberately not in v1
+
+- **OTA upload UI.** You can push firmware via `curl -F` against the Tree's `/ota` endpoint for now; the dashboard wrapper is a v1.1 polish.
+- **I2C bus scan / UART signature sniff.** Auto-detection requires the dashboard to take over the Tree's serial port at length — better delivered when the Orchard View talks to the Tree continuously rather than one-shot.
+- **Orchard Pass NFT verification at registration time.** That's Phase 6 — the oracle will gate `/register` on it then.
+- **Multi-Tree admin actions (delete, rename, force-reflash).** Coming after Phase 7 / when there's actually a fleet to manage.
 
 ## Status
 
-Phase 4 — not yet implemented. Depends on Phase 2 (firmware command surface for the WiFi / OTA / read flows) and Phase 3 (oracle endpoints).
+Phase 4 implemented: provisioning wizard, live view, registered-Trees listing, all wired to the oracle. Closes the v1 data loop visually.

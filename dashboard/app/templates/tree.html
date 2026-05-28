@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Tree {{ node.node_id[:8] }}… — Orchard View{% endblock %}
+{% block body %}
+
+<h1>Tree</h1>
+<p class="muted">
+  <span class="mono" title="{{ node.node_id }}">{{ node.node_id }}</span>
+  {% if node.label %}— {{ node.label }}{% endif %}
+  · fw {{ node.fw_version or '?' }}
+</p>
+
+<section class="card status">
+  <div id="alive-light" class="dot dot-grey">●</div>
+  <div>
+    <strong id="alive-label">Waiting for first reading…</strong>
+    <div class="muted" id="last-age">Last reading: —</div>
+    <div class="muted" id="uptime-line">Uptime this Season: —</div>
+  </div>
+</section>
+
+<section class="grid">
+  <div class="card">
+    <h3>MQ-135 — air quality</h3>
+    <div id="mq135-data"><span class="muted">no readings yet</span></div>
+  </div>
+  <div class="card">
+    <h3>GPS</h3>
+    <div id="gps-data"><span class="muted">no readings yet</span></div>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Recent readings</h3>
+  <table class="readings">
+    <thead><tr><th>received_at (UTC)</th><th>MQ-135 raw</th><th>GPS fix</th><th>lat</th><th>lon</th></tr></thead>
+    <tbody id="readings-body"><tr><td colspan="5" class="muted">no readings yet</td></tr></tbody>
+  </table>
+</section>
+
+<details class="raw">
+  <summary>Latest reading (raw JSON)</summary>
+  <pre id="readings-raw" class="mono">—</pre>
+</details>
+
+{% endblock %}
+{% block scripts %}
+<script>
+  window.NODE_ID = "{{ node.node_id }}";
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script>OrchardView.initTreePage();</script>
+{% endblock %}

@@ -1,0 +1,14 @@
+# The Orchard — root project config.
+#
+# Currently used only for pytest config. We deliberately don't declare
+# this repo as a single installable Python package; each component
+# (oracle/, dashboard/, chia/, ...) is its own folder runnable via
+# `python -m <component>.app`.
+
+[tool.pytest.ini_options]
+# importlib mode treats every test file as a fully-qualified module by
+# path, which avoids the "two test_*.py files in `tests/` collide" trap
+# you hit when components don't share a package root.
+addopts = "--import-mode=importlib"
+testpaths = ["oracle/tests", "dashboard/tests"]
+python_files = ["test_*.py"]

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Plant a Tree — Orchard View{% endblock %}
+{% block body %}
+
+<h1>Plant a Tree</h1>
+<p class="muted">Provision a Tree end-to-end: identify it over USB, register it with the oracle, push WiFi creds, point it at the oracle, and trigger the first sample.</p>
+
+<section class="card">
+  <h2>1. Connect over USB</h2>
+  <p>Pick the COM port your Tree is plugged into. If it isn't listed, click <em>Refresh</em>.</p>
+  <div class="row">
+    <label>Port: <select id="port-select"></select></label>
+    <button id="refresh-ports">Refresh ports</button>
+    <button id="identify-btn" class="primary">Identify Tree</button>
+  </div>
+  <div id="identify-result" class="result"></div>
+</section>
+
+<section class="card" id="step-config" hidden>
+  <h2>2. Configure the Tree</h2>
+  <p>The Tree will store WiFi credentials in NVS and start POSTing to the oracle URL you set here.</p>
+
+  <label>Label <span class="muted">(optional)</span>
+    <input id="label" type="text" placeholder="e.g. backyard-1">
+  </label>
+  <label>Wallet address <span class="muted">(optional; for $JUICE payouts later)</span>
+    <input id="wallet" type="text" placeholder="xch1...">
+  </label>
+  <label>WiFi SSID
+    <input id="ssid" type="text" placeholder="MyHomeWiFi" required>
+  </label>
+  <label>WiFi password
+    <input id="password" type="password" placeholder="" required>
+  </label>
+  <label>Oracle URL <span class="muted">(the Tree will POST signed readings here)</span>
+    <input id="oracle-url" type="text" value="{{ default_tree_oracle_url }}" required>
+  </label>
+
+  <button id="provision-btn" class="primary">Provision Tree</button>
+  <div id="provision-progress"></div>
+</section>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script>OrchardView.initProvisionPage();</script>
+{% endblock %}
