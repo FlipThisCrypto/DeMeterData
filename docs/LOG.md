@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-05-29 — BME280 + GPS investigation deferred until new sensors arrive
+
+### Where we left it
+
+- **MQ-135** wired and producing real ADC values continuously. Live view shows real numbers, oracle is storing them, dashboard rendering them every poll.
+- **BME280** wired but `active=no` in the firmware boot log — driver's `begin()` probed both `0x76` and `0x77` and got no ACK. Means the chip isn't electrically on the I2C bus despite the wires being on the right pins (GPIO 21/22). Cause is somewhere on the BME280-side wiring (power voltage wrong, SDA/SCL crossed at the sensor, or sensor unit is bad).
+- **GPS** wired but `satellites=0`. `GPS_RAW` console command showed 3 seconds of complete silence on the UART — chip is receiving zero bytes from the GPS module's TX pin. Cause is GPS-module-side (antenna unplugged, no power, dead module, or TX/RX swapped at the sensor).
+- **Both pre-existing sensors are on the way out**; new BME280 + GPS modules are on order. Hardware investigation parked until they arrive.
+
+### Diagnostic infrastructure landed this session
+
+- `I2C_SCAN` console command — probes every I2C address 1..126, prints which ones ACK. Used to confirm the BME280 isn't on the bus regardless of where the wires are pointing.
+- `GPS_RAW` console command — drains the GPS UART, then streams 3 seconds of raw bytes straight to the host. Used to distinguish "GPS wires wrong" (silence) from "GPS antenna missing" (sentences but no fix) from "wrong baud rate" (garbled bytes).
+- `pio device monitor --filter send_on_enter` is the right tool for ad-hoc testing — typing commands interactively works, where one-shot Python scripts time out before slower commands finish.
+
+Both new commands ship as part of the firmware and will be useful when the new sensors arrive — no re-flash required to debug the next round.
+
+### Decision
+
+- **Pivot to Phase 5 (Season attestation writer).** The attestation writer reads from the oracle's uptime buckets, which are already accumulating — it does not need GPS or BME280 data. We can build it in parallel with the sensor delivery and have everything in place when the hardware arrives.
+
+---
+
 ## 2026-05-28 — 🌱 End-to-end loop closed on real hardware
 
 **Tree node_id: `5B9BB022649FA93D4091DA4BA40714B9`** — running fw 0.1.0 (new firmware with BME280 driver + GPS on GPIO 18/19), POSTing signed readings every 60 seconds, oracle storing them in SQLite, Orchard View polling and rendering them in the browser. **The full v1 proof of concept works.**
