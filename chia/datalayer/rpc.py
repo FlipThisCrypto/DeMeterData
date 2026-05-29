@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: Apache-2.0
+"""TLS-wrapped HTTP clients for Chia full-node and DataLayer RPCs.
+
+Chia's RPC endpoints use HTTPS with mutual TLS. Operator's client
+cert + key path go into ``chia/config.yaml``; we present them on every
+request. ``verify=False`` because Chia's CA is self-signed and our
+local connections are on localhost only.
+
+If you push this to a multi-host setup later, switch to passing the
+operator's CA cert path via ``verify=<ca_path>`` instead.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+
+import requests
+import urllib3
+
+# Local-only mTLS to a self-signed CA — silence the legitimate-but-noisy
+# warning about disabled host verification.
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+class ChiaRpcError(RuntimeError):
+    """Raised for any non-2xx Chia RPC response or transport failure."""
+
+
+@dataclass
+class _Endpoint:
+    host: str
+    port: int
+    cert_path: str
+    key_path: str
+
+    def url(self, route: str) -> str:
+        return f"https://{self.host}:{self.port}/{route.lstrip('/')}"
+
+
+class FullNodeRpc:
+    """Subset of Chia full-node RPC the attestation writer needs."""
+
+    def __init__(self, host: str, port: int, cert_path: str, key_path: str):
+        self._ep = _Endpoint(host, port, cert_path, key_path)
+
+    def _post(self, route: str, body: dict) -> dict:
+        try:
+            r = requests.post(
+                self._ep.url(route),
+                json=body,
+                cert=(self._ep.cert_path, self._ep.key_path),
+                verify=False,
+                timeout=30,
+            )
+        except requests.RequestException as e:
+            raise ChiaRpcError(f"full_node {route} unreachable: {e}") from e
+        if r.status_code != 200:
+            raise ChiaRpcError(f"full_node {route} -> {r.status_code}: {r.text}")
+        data = r.json()
+        if not data.get("success", True):
+            raise ChiaRpcError(f"full_node {route} returned success=false: {data}")
+        return data
+
+    def get_blockchain_state(self) -> dict:
+        return self._post("get_blockchain_state", {})
+
+    def peak_height(self) -> int:
+        st = self.get_blockchain_state()
+        # blockchain_state.peak.height is the current synced height.
+        peak = st.get("blockchain_state", {}).get("peak") or {}
+        return int(peak.get("height", 0))
+
+
+class DataLayerRpc:
+    """Subset of Chia DataLayer RPC the attestation writer needs."""
+
+    def __init__(self, host: str, port: int, cert_path: str, key_path: str):
+        self._ep = _Endpoint(host, port, cert_path, key_path)
+
+    def _post(self, route: str, body: dict) -> dict:
+        try:
+            r = requests.post(
+                self._ep.url(route),
+                json=body,
+                cert=(self._ep.cert_path, self._ep.key_path),
+                verify=False,
+                timeout=120,  # batch_update can take a while
+            )
+        except requests.RequestException as e:
+            raise ChiaRpcError(f"datalayer {route} unreachable: {e}") from e
+        if r.status_code != 200:
+            raise ChiaRpcError(f"datalayer {route} -> {r.status_code}: {r.text}")
+        data = r.json()
+        if not data.get("success", True):
+            raise ChiaRpcError(f"datalayer {route} returned success=false: {data}")
+        return data
+
+    def batch_update(self, store_id: str, changelist: list[dict]) -> dict:
+        """Apply a list of insert/delete operations to a DataLayer store.
+
+        ``changelist`` items look like:
+            {"action": "insert", "key": "<hex>", "value": "<hex>"}
+            {"action": "delete", "key": "<hex>"}
+        """
+        body = {"id": store_id, "changelist": changelist}
+        return self._post("batch_update", body)
+
+    def get_value(self, store_id: str, key_hex: str) -> str | None:
+        body = {"id": store_id, "key": key_hex}
+        try:
+            data = self._post("get_value", body)
+        except ChiaRpcError:
+            return None
+        return data.get("value")

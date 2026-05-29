@@ -1,0 +1,10 @@
+# The Orchard — Chia integration runtime dependencies.
+# Used by chia.datalayer (Phase 5) and chia.payout (Phase 7).
+
+requests>=2.32.0
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+pyyaml>=6.0
+
+# Dev / tests.
+pytest>=8.0.0

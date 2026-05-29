@@ -1,0 +1,60 @@
+# The Orchard — Chia integration config.
+#
+# Copy this file to `chia/config.yaml` (which is gitignored) and fill
+# in your local paths. The example values here assume a default
+# `chia init` mainnet install on the same machine.
+
+network: mainnet
+
+# ----- $JUICE token (only the payout script reads this) -------------
+token:
+  name: "JUICE"
+  asset_id: "285164e6af80202d2b07fa3cc6ae47ff2906029365a83c50fcab25a56b937121"
+
+# ----- v1 reward parameters (tunable) -------------------------------
+reward:
+  daily_rate: 1.0
+  season_blocks: 4608
+  accrual_unit_hours: 1
+
+# ----- Oracle (where we read uptime data from) ----------------------
+oracle:
+  url: "http://127.0.0.1:8000"
+
+# ----- Phase 5 attestation writer ---------------------------------
+# Idempotent. Re-run as often as you like; only changed values are
+# pushed to DataLayer. Set `max_lookback_seasons` to cap how many
+# closed Seasons we look back per run (default null = all).
+attestation:
+  max_lookback_seasons: null      # null = no cap
+  skip_empty_seasons: true        # don't attest seasons with 0 hours
+
+# ----- Chia full node (read-only — we just need peak block height) --
+full_node:
+  host: "127.0.0.1"
+  port: 8555
+  cert_path: "~/.chia/mainnet/config/ssl/full_node/private_full_node.crt"
+  key_path:  "~/.chia/mainnet/config/ssl/full_node/private_full_node.key"
+
+# ----- Chia DataLayer ------------------------------------------------
+# Create the store once with:
+#   chia data create_data_store -m 0.0001
+# Then paste the returned `id` value into `store_id` below.
+datalayer:
+  host: "127.0.0.1"
+  port: 8562
+  cert_path: "~/.chia/mainnet/config/ssl/data_layer/private_data_layer.crt"
+  key_path:  "~/.chia/mainnet/config/ssl/data_layer/private_data_layer.key"
+  store_id: ""
+
+# ----- Chia reference wallet (used by Phase 7 payout) ----------------
+wallet:
+  host: "127.0.0.1"
+  port: 9256
+  fingerprint: 0
+  cert_path: "~/.chia/mainnet/config/ssl/wallet/private_wallet.crt"
+  key_path:  "~/.chia/mainnet/config/ssl/wallet/private_wallet.key"
+
+# Per-oracle signing key is auto-generated on first run of the
+# attestation writer. Lives at chia/data/oracle_signing_key.hex
+# (gitignored). Never appears in this file.

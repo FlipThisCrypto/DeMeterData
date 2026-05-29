@@ -93,5 +93,10 @@ data/
 logs/
 *.log
 
+# --- Component-local configs (operator-private, gitignored) ---
+chia/config.yaml
+oracle/.env
+dashboard/.env
+
 # --- Claude / dev tooling local state ---
 .claude/
