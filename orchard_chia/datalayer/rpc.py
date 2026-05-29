@@ -112,3 +112,13 @@ class DataLayerRpc:
         except ChiaRpcError:
             return None
         return data.get("value")
+
+    def get_keys(self, store_id: str) -> list[str]:
+        """All keys in the store, hex-encoded. Used by the payout
+        reader to discover every attestation that's been published."""
+        body = {"id": store_id}
+        try:
+            data = self._post("get_keys", body)
+        except ChiaRpcError:
+            return []
+        return data.get("keys", [])

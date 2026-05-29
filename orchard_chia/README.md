@@ -33,10 +33,16 @@ orchard_chia/
 │   ├── generate.py           # CHIP-7 metadata generator (pure functions)
 │   ├── mint.py               # mint plan loader + nft_mint_nft pipeline
 │   └── verify.py             # wallet-holds-pass ownership check
-├── payout/                   # Phase 7 — $JUICE batched payout (stub)
+├── payout/                   # Phase 7 — Season harvest ($JUICE payout)  ✅
+│   ├── __main__.py           # `python -m orchard_chia.payout`
+│   ├── main.py               # orchestrator (dry-run by default)
+│   ├── reader.py             # pull every attestation from DataLayer
+│   ├── calculator.py         # pure: hours -> $JUICE mojos
+│   └── watermark.py          # SQLite tracker, (node, season) -> tx_id
 └── tests/
     ├── test_datalayer.py     # 9 attest pure-function tests
-    └── test_nft.py           # 13 generator + mint-plan-validation tests
+    ├── test_nft.py           # 13 generator + mint-plan-validation tests
+    └── test_payout.py        # 18 calculator + watermark + reader tests
 ```
 
 ## Phase 5 — Season attestation writer
@@ -119,4 +125,4 @@ The wallet module will wrap the Chia reference wallet RPC (port 9256) for the bi
 |-------|--------|--------|
 | 5     | `orchard_chia/datalayer/` | ✅ Implemented + tested + **first on-chain attestation landed 2026-05-29** |
 | 6     | `orchard_chia/nft/` + `nft/` | ✅ Implemented + tested — generator, mint pipeline, ownership verifier all ready; awaiting video URIs to actually mint |
-| 7     | `orchard_chia/payout/` | ⬜ Not started |
+| 7     | `orchard_chia/payout/` | ✅ Implemented + tested — reads attestations from DataLayer, computes per-wallet $JUICE, runs `cat_spend` with interactive confirm + idempotent watermark |

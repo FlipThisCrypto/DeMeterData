@@ -4,6 +4,50 @@
 
 ---
 
+## 2026-05-29 — Phase 7: Season harvest ($JUICE payout)
+
+The v1 economic loop is now structurally complete. Phase 7 reads every signed attestation Phase 5 publishes to DataLayer, verifies each one with the oracle's signing key, computes per-Tree rewards, aggregates per recipient wallet, and (in live mode with explicit confirm) sends $JUICE via the Chia reference wallet's `cat_spend` RPC.
+
+### Shipped
+
+- **Reader** (`orchard_chia/payout/reader.py`) — discovers every attestation key in the configured DataLayer store via `get_keys`, filters to the `attest:<NODE>:<SEASON:08d>` shape, fetches and parses each value. Hex-decoded ASCII keys make on-chain inspection trivial.
+- **Calculator** (`orchard_chia/payout/calculator.py`) — pure functions. `juice_mojos_for_attestation(attest, daily_rate)` returns CAT mojos. `aggregate_by_wallet(rows)` sums per recipient. v1 math is exactly the spec from ADR-0001: `mojos = round((hours/24) * daily_rate * 1000)`. Future multipliers (Pass tier, sensor diversity, geographic scarcity, reputation) slot in here.
+- **Watermark** (`orchard_chia/payout/watermark.py`) — local SQLite at `orchard_chia/data/payout_watermark.db` (gitignored). Records every `(node_id, season) -> (paid_mojos, paid_at, tx_id)`. `INSERT OR IGNORE` makes double-record a no-op; existing rows always win. Lose the file → worst case is a duplicate payment; recommendation in the README is to back it up.
+- **CAT spender** (extensions in `orchard_chia/wallet/rpc.py`) — `get_wallets(type=6)`, `cat_get_asset_id`, `find_cat_wallet_id_by_asset`, `cat_spend`. Finds $JUICE by asset_id rather than hard-coded wallet_id so the script works regardless of the operator's wallet ordering.
+- **DataLayer `get_keys`** added to `orchard_chia/datalayer/rpc.py` so the reader can enumerate without prior knowledge.
+- **Orchestrator** (`orchard_chia/payout/main.py`) — reads attestations, builds a plan with one row per (node, season) and a `status` per row (`ready`, `skipped:bad_sig`, `skipped:already_paid`, `skipped:no_wallet`, `skipped:zero`), renders a human-readable table, aggregates per wallet, and either prints the dry-run summary or interactively confirms before calling `cat_spend` per recipient.
+- **CLI flags:** `--confirm` (interactive PAY prompt), `--yes` (skip prompt for cron), `--fee MOJOS` (XCH network fee), `--memo TEXT` (attached to each spend), `--plan-out PATH` (dump plan JSON), `--watermark PATH` (override SQLite location).
+- **18 tests** in `orchard_chia/tests/test_payout.py`: calculator at boundaries (0h, 1h, 12h, 24h, scaled rate, negative reject, out-of-range reject), per-wallet aggregation, watermark insert/read/idempotency/persistence/totals, reader key-decode round-trip + rejection cases. 57/57 across all components.
+
+### Decisions
+
+- **Dry-run is the default.** Running `python -m orchard_chia.payout` with no flags reports what *would* be paid and exits with the watermark untouched. Real spends require `--confirm` (interactive PAY prompt) or `--yes` (no prompt — meant for cron).
+- **One `cat_spend` per recipient**, not a single batched multi-output spend. Easier to read, easier to debug, easier to retry one failure without retrying the whole batch. Can move to `send_transaction_multi` later if fee minimization matters.
+- **Trees without `wallet_address` set are silently skipped** (`status: skipped:no_wallet`). Common when an operator registered before binding a wallet; payable in a later run once they fill it in. No error, no double-spend risk.
+- **Signature verification is mandatory** — any attestation that fails `verify_signature` with the oracle's current key is dropped (`status: skipped:bad_sig`). Tampered or key-rotated entries never reach the spend stage.
+
+### What's deferred to v1.1+
+
+- **Tier multipliers** for Orchard Passes (Bronze/Silver/Gold) — calculator interface already accepts the attestation dict, so it's a one-spot change.
+- **Cross-machine NFT verification** at the oracle's `/register` endpoint (Phase 6.5) — local-wallet check works; production needs Spacescan/Mintgarden or a signed challenge flow.
+- **Batched multi-output `cat_spend`** for fee efficiency at scale.
+- **Cron / Task Scheduler example** for `--yes` runs.
+
+### Running it (when DataLayer has attestations)
+
+```powershell
+# Dry-run — shows the plan, no chain action
+python -m orchard_chia.payout
+
+# Interactive confirm — prompts for PAY before sending
+python -m orchard_chia.payout --confirm
+
+# Headless — no prompt, sends immediately. Use in cron once you trust it.
+python -m orchard_chia.payout --yes --fee 0
+```
+
+---
+
 ## 2026-05-29 — Phase 6: Orchard Pass NFTs
 
 Richard's direction: **mint 10 video NFTs as the first 10 Season Passes** — credentials with real artistic identity, not just functional metadata. Each Pass is a short video; holding a Pass is the on-chain claim that lets a wallet register a Tree and harvest $JUICE.

@@ -151,3 +151,48 @@ class WalletRpc:
         """Look up a single NFT by its coin id (or launcher id)."""
         body = {"coin_id": coin_id}
         return self._post("nft_get_info", body).get("nft_info", {})
+
+    # ------------------------------------------------------------------
+    # CAT (Phase 7 payout)
+    # ------------------------------------------------------------------
+
+    def cat_get_asset_id(self, wallet_id: int) -> str:
+        body = {"wallet_id": wallet_id}
+        return self._post("cat_get_asset_id", body).get("asset_id", "")
+
+    def find_cat_wallet_id_by_asset(self, asset_id_hex: str) -> int | None:
+        """Iterate every CAT wallet and return the wallet_id whose
+        asset_id matches the given $JUICE-style hex. Returns None if
+        no CAT wallet for that asset exists in this key.
+        """
+        asset_id_hex = asset_id_hex.lower().replace("0x", "")
+        for w in self.get_wallets(wallet_type=6):
+            wid = int(w["id"])
+            try:
+                aid = self.cat_get_asset_id(wid).lower().replace("0x", "")
+            except WalletRpcError:
+                continue
+            if aid == asset_id_hex:
+                return wid
+        return None
+
+    def cat_spend(
+        self,
+        *,
+        wallet_id: int,
+        inner_address: str,
+        amount: int,                # CAT mojos (1 CAT = 1000 mojos for 3-decimal CATs)
+        fee: int = 0,
+        memos: list[str] | None = None,
+    ) -> dict:
+        """Send `amount` CAT mojos from `wallet_id` to `inner_address`.
+        Returns the wallet RPC's response including transaction_id."""
+        body: dict = {
+            "wallet_id": wallet_id,
+            "inner_address": inner_address,
+            "amount": amount,
+            "fee": fee,
+        }
+        if memos:
+            body["memos"] = memos
+        return self._post("cat_spend", body, timeout=120)

@@ -1,0 +1,330 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Season harvest — orchestrator.
+
+Reads every signed attestation from the Chia DataLayer store, verifies
+each signature with the oracle's signing key, computes per-Tree
+rewards, aggregates per wallet, and (in live mode) sends $JUICE via
+``cat_spend``. Idempotent via a local watermark SQLite that records
+every ``(node, season)`` already paid.
+
+Run:
+    python -m orchard_chia.payout                # dry-run (default)
+    python -m orchard_chia.payout --confirm      # interactive prompt
+    python -m orchard_chia.payout --yes          # spend without prompt
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import yaml
+
+from .. import datalayer as dl_pkg  # type: ignore  # noqa: F401
+from ..datalayer import attest, config as base_config
+from ..datalayer.oracle import OracleClient, OracleError
+from ..datalayer.rpc import ChiaRpcError, DataLayerRpc
+from ..wallet.rpc import WalletRpc, WalletRpcError
+from . import calculator, reader, watermark
+
+
+WATERMARK_DEFAULT_PATH = (
+    Path(base_config.CONFIG_PATH).parent / "data" / "payout_watermark.db"
+)
+
+
+# ---------------------------------------------------------------------
+# Config helpers (additions to the datalayer config — wallet + token)
+# ---------------------------------------------------------------------
+
+def _load_raw_config() -> dict:
+    return yaml.safe_load(base_config.CONFIG_PATH.read_text(encoding="utf-8")) or {}
+
+
+def _wallet_rpc() -> WalletRpc:
+    raw = _load_raw_config()
+    w = raw.get("wallet") or {}
+    return WalletRpc(
+        host=w.get("host", "127.0.0.1"),
+        port=int(w.get("port", 9256)),
+        cert_path=base_config._expand(w.get("cert_path", "")),
+        key_path=base_config._expand(w.get("key_path", "")),
+        fingerprint=int(w.get("fingerprint", 0)),
+    )
+
+
+def _token_asset_id() -> str:
+    raw = _load_raw_config()
+    return ((raw.get("token") or {}).get("asset_id") or "").lower().replace("0x", "")
+
+
+def _daily_rate() -> float:
+    raw = _load_raw_config()
+    return float((raw.get("reward") or {}).get("daily_rate", 1.0))
+
+
+# ---------------------------------------------------------------------
+# Pipeline stages
+# ---------------------------------------------------------------------
+
+def _attestations_to_plan(
+    attestations: list[reader.StoredAttestation],
+    *,
+    oracle: OracleClient,
+    signing_key_hex: str,
+    daily_rate: float,
+    wm: watermark.Watermark,
+) -> list[dict]:
+    """Per-Tree, per-Season reward intent. One row per attestation,
+    after signature verification and watermark filtering."""
+    plan: list[dict] = []
+    node_cache: dict[str, dict | None] = {}
+
+    for s in attestations:
+        # 1. Verify signature against the oracle's own signing key.
+        if not attest.verify_signature(s.signed, signing_key_hex):
+            plan.append({
+                "node_id":   s.node_id,
+                "season":    s.season,
+                "status":    "skipped:bad_sig",
+                "hours":     s.signed.get("hours_online"),
+                "mojos":     0,
+            })
+            continue
+
+        # 2. Skip already-paid.
+        if wm.is_paid(s.node_id, s.season):
+            plan.append({
+                "node_id":   s.node_id,
+                "season":    s.season,
+                "status":    "skipped:already_paid",
+                "hours":     s.signed.get("hours_online"),
+                "mojos":     wm.get_paid_amount(s.node_id, s.season) or 0,
+            })
+            continue
+
+        # 3. Look up the Tree's wallet address from the oracle.
+        node = node_cache.get(s.node_id)
+        if node is None:
+            try:
+                node = oracle.get_node(s.node_id) or {}
+            except OracleError:
+                node = {}
+            node_cache[s.node_id] = node
+        wallet_address = (node or {}).get("wallet_address") or ""
+
+        if not wallet_address:
+            plan.append({
+                "node_id":   s.node_id,
+                "season":    s.season,
+                "status":    "skipped:no_wallet",
+                "hours":     s.signed.get("hours_online"),
+                "mojos":     0,
+            })
+            continue
+
+        # 4. Compute reward.
+        mojos = calculator.juice_mojos_for_attestation(
+            s.signed, daily_rate=daily_rate,
+        )
+        plan.append({
+            "node_id":         s.node_id,
+            "season":          s.season,
+            "wallet_address":  wallet_address,
+            "hours":           int(s.signed.get("hours_online", 0)),
+            "mojos":           mojos,
+            "status":          "ready" if mojos > 0 else "skipped:zero",
+        })
+    return plan
+
+
+def _format_table(plan: list[dict]) -> str:
+    rows = [
+        ("NODE", "SEASON", "HOURS", "WALLET", "$JUICE", "STATUS"),
+    ]
+    for p in plan:
+        rows.append((
+            p["node_id"][:8] + "..",
+            str(p["season"]),
+            str(p.get("hours", "?")),
+            (p.get("wallet_address") or "—")[:24] + ("…" if len(p.get("wallet_address") or "") > 24 else ""),
+            f"{calculator.mojos_to_juice(int(p.get('mojos', 0))):.3f}",
+            p["status"],
+        ))
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    lines = []
+    for i, row in enumerate(rows):
+        lines.append("  ".join(c.ljust(widths[j]) for j, c in enumerate(row)))
+        if i == 0:
+            lines.append("  ".join("-" * w for w in widths))
+    return "\n".join(lines)
+
+
+def _confirm_interactive(total_recipients: int, total_juice: float) -> bool:
+    print()
+    print(f"About to send {total_juice:.3f} $JUICE to {total_recipients} wallet(s).")
+    print(f"Type   PAY   to confirm, anything else to abort:")
+    typed = input("> ").strip()
+    return typed == "PAY"
+
+
+# ---------------------------------------------------------------------
+# Entry
+# ---------------------------------------------------------------------
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="python -m orchard_chia.payout")
+    parser.add_argument("--confirm", action="store_true",
+                        help="prompt before sending (interactive)")
+    parser.add_argument("--yes", action="store_true",
+                        help="actually send, no prompt (CAUTION)")
+    parser.add_argument("--fee", type=int, default=0,
+                        help="XCH mojos fee per spend (default 0)")
+    parser.add_argument("--memo", default="",
+                        help="UTF-8 memo to attach to each spend (optional)")
+    parser.add_argument("--plan-out", default=None,
+                        help="write the plan as JSON to this path")
+    parser.add_argument("--watermark", default=str(WATERMARK_DEFAULT_PATH),
+                        help="watermark DB path")
+    args = parser.parse_args(argv)
+
+    try:
+        cfg = base_config.load()
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+
+    if not cfg.data_layer.store_id:
+        print("ERROR: orchard_chia/config.yaml -> datalayer.store_id is empty.",
+              file=sys.stderr)
+        return 2
+
+    asset_id = _token_asset_id()
+    if not asset_id:
+        print("ERROR: orchard_chia/config.yaml -> token.asset_id is empty.",
+              file=sys.stderr)
+        return 2
+
+    daily_rate = _daily_rate()
+    oracle = OracleClient(cfg.oracle.url)
+    dl = DataLayerRpc(
+        cfg.data_layer.host, cfg.data_layer.port,
+        cfg.data_layer.cert_path, cfg.data_layer.key_path,
+    )
+
+    print(f"[orchard.payout] oracle:    {cfg.oracle.url}")
+    print(f"[orchard.payout] datalayer: {cfg.data_layer.host}:{cfg.data_layer.port}")
+    print(f"[orchard.payout] store:     {cfg.data_layer.store_id}")
+    print(f"[orchard.payout] asset_id:  {asset_id}")
+    print(f"[orchard.payout] daily_rate:{daily_rate} $JUICE/Tree/day")
+
+    print("[orchard.payout] reading attestations from DataLayer ...")
+    try:
+        attestations = reader.read_all_attestations(dl, cfg.data_layer.store_id)
+    except ChiaRpcError as e:
+        print(f"ERROR: DataLayer get_keys failed: {e}", file=sys.stderr)
+        return 3
+    print(f"[orchard.payout] {len(attestations)} attestation(s) found on chain")
+
+    with watermark.Watermark(args.watermark) as wm:
+        plan = _attestations_to_plan(
+            attestations,
+            oracle=oracle,
+            signing_key_hex=cfg.signing_key_hex,
+            daily_rate=daily_rate,
+            wm=wm,
+        )
+
+        if args.plan_out:
+            Path(args.plan_out).write_text(
+                json.dumps(plan, indent=2), encoding="utf-8")
+            print(f"[orchard.payout] plan written to {args.plan_out}")
+
+        print()
+        print(_format_table(plan))
+        print()
+
+        # Aggregate per wallet.
+        ready_rows = [p for p in plan if p["status"] == "ready"]
+        per_wallet = calculator.aggregate_by_wallet([
+            {"wallet_address": p["wallet_address"], "mojos": p["mojos"]}
+            for p in ready_rows
+        ])
+        total_mojos = sum(per_wallet.values())
+        total_juice = calculator.mojos_to_juice(total_mojos)
+        print(f"[orchard.payout] ready: {len(ready_rows)} attestation(s) "
+              f"-> {len(per_wallet)} wallet(s) -> {total_juice:.3f} $JUICE total")
+
+        if not per_wallet:
+            print("[orchard.payout] nothing to send.")
+            return 0
+
+        # Dry-run by default.
+        if not (args.confirm or args.yes):
+            print("[orchard.payout] DRY RUN (re-run with --confirm or --yes "
+                  "to actually send).")
+            return 0
+
+        if args.confirm and not args.yes:
+            if not _confirm_interactive(len(per_wallet), total_juice):
+                print("[orchard.payout] aborted by user.")
+                return 1
+
+        # Live: find the $JUICE CAT wallet, then iterate.
+        rpc = _wallet_rpc()
+        try:
+            cat_wallet_id = rpc.find_cat_wallet_id_by_asset(asset_id)
+        except WalletRpcError as e:
+            print(f"ERROR: wallet RPC unreachable: {e}", file=sys.stderr)
+            return 4
+        if cat_wallet_id is None:
+            print(f"ERROR: no CAT wallet found for asset_id {asset_id}. "
+                  f"Add it once in the Chia GUI / CLI, then retry.",
+                  file=sys.stderr)
+            return 4
+
+        print(f"[orchard.payout] $JUICE CAT wallet_id: {cat_wallet_id}")
+
+        # One cat_spend per recipient. Could batch later via
+        # send_transaction_multi; for v1, keeping it simple + auditable.
+        sent_ok = 0
+        sent_fail = 0
+        for wallet_address, owed_mojos in per_wallet.items():
+            print(f"  + {wallet_address}: {calculator.mojos_to_juice(owed_mojos):.3f} $JUICE")
+            try:
+                resp = rpc.cat_spend(
+                    wallet_id=cat_wallet_id,
+                    inner_address=wallet_address,
+                    amount=int(owed_mojos),
+                    fee=int(args.fee),
+                    memos=[args.memo] if args.memo else None,
+                )
+            except WalletRpcError as e:
+                print(f"    ! FAILED: {e}")
+                sent_fail += 1
+                continue
+            tx_id = (resp.get("transaction_id")
+                     or resp.get("tx_id")
+                     or resp.get("transaction", {}).get("name", ""))
+            print(f"    tx_id={tx_id}")
+            sent_ok += 1
+
+            # Record every (node, season) that contributed to this wallet's
+            # owed amount. We've already filtered to status=ready.
+            for p in ready_rows:
+                if p["wallet_address"] == wallet_address:
+                    wm.record_payment(
+                        node_id=p["node_id"],
+                        season=p["season"],
+                        wallet_address=wallet_address,
+                        paid_mojos=p["mojos"],
+                        tx_id=tx_id,
+                    )
+
+        print(f"[orchard.payout] sent ok={sent_ok} failed={sent_fail}")
+        return 0 if sent_fail == 0 else 5
+
+
+if __name__ == "__main__":
+    sys.exit(main())
