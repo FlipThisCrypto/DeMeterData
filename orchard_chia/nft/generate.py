@@ -31,7 +31,7 @@ ORCHARD_GENESIS_ICON_URI = (
     "QmUWhqeByfKrVAa5Ev3MRymFmhMSoTMnzDwE3Gjd4Cvray"
 )
 ORCHARD_GENESIS_WEBSITE = "https://github.com/FlipThisCrypto/the-orchard"
-ORCHARD_GENESIS_TWITTER = ""
+ORCHARD_GENESIS_TWITTER = "https://x.com/FiendStudios"
 
 # How many Passes in the genesis batch.
 GENESIS_TOTAL = 10
