@@ -1,0 +1,127 @@
+# The Orchard — Genesis Passes mint plan (template).
+#
+# Copy this file to `nft/mint_plan.yaml` (gitignored if you want it
+# kept local) and fill in the URIs + SHA-256 hashes you got back from
+# your IPFS/CDN host after uploading the videos and metadata JSONs.
+#
+# Then:
+#   python -m orchard_chia.nft validate --plan nft/mint_plan.yaml
+#   python -m orchard_chia.nft mint     --plan nft/mint_plan.yaml
+
+# The locked-in collection id from orchard_chia/nft/generate.py.
+collection_id: "f9a0c0a0-0001-4000-8000-000000000001"
+
+# Where the freshly-minted NFTs land. Use one of YOUR addresses — these
+# are credentials you'll later distribute via NFT transfers.
+target_address:  "xch1YOUR_ADDRESS_HERE"
+royalty_address: "xch1YOUR_ADDRESS_HERE"
+royalty_percentage: 0       # credentials, not collectibles
+
+# Series total used in the on-chain edition tag. Should match the
+# number of entries below.
+edition_total: 10
+
+# Per-mint fee, in mojos. Set 0 unless you want priority.
+fee_mojos: 0
+
+passes:
+  - edition_number: 1
+    metadata_file: "metadata/0001.json"
+    # Where the video lives (you should give >=2 URIs so the NFT
+    # has redundancy across hosts).
+    data_uris:
+      - "ipfs://bafybeiXXXXXXXXX.../orchard-pass-001.mp4"
+      - "https://nftstorage.link/ipfs/bafybeiXXXXXXXXX.../orchard-pass-001.mp4"
+    # SHA-256 of the video file, hex (64 chars).
+    data_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    # Where the metadata JSON lives.
+    meta_uris:
+      - "ipfs://bafybeiYYYYYYYYY.../0001.json"
+      - "https://nftstorage.link/ipfs/bafybeiYYYYYYYYY.../0001.json"
+    # SHA-256 of the canonicalized metadata JSON.
+    meta_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    license_uris: []          # optional license URIs
+    license_hash: ""          # optional, 64 hex chars if provided
+
+  - edition_number: 2
+    metadata_file: "metadata/0002.json"
+    data_uris:
+      - "ipfs://bafybeiXXXXXXXXX.../orchard-pass-002.mp4"
+    data_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    meta_uris:
+      - "ipfs://bafybeiYYYYYYYYY.../0002.json"
+    meta_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    license_uris: []
+    license_hash: ""
+
+  - edition_number: 3
+    metadata_file: "metadata/0003.json"
+    data_uris: ["ipfs://.../orchard-pass-003.mp4"]
+    data_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    meta_uris: ["ipfs://.../0003.json"]
+    meta_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    license_uris: []
+    license_hash: ""
+
+  - edition_number: 4
+    metadata_file: "metadata/0004.json"
+    data_uris: ["ipfs://.../orchard-pass-004.mp4"]
+    data_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    meta_uris: ["ipfs://.../0004.json"]
+    meta_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    license_uris: []
+    license_hash: ""
+
+  - edition_number: 5
+    metadata_file: "metadata/0005.json"
+    data_uris: ["ipfs://.../orchard-pass-005.mp4"]
+    data_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    meta_uris: ["ipfs://.../0005.json"]
+    meta_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    license_uris: []
+    license_hash: ""
+
+  - edition_number: 6
+    metadata_file: "metadata/0006.json"
+    data_uris: ["ipfs://.../orchard-pass-006.mp4"]
+    data_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    meta_uris: ["ipfs://.../0006.json"]
+    meta_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    license_uris: []
+    license_hash: ""
+
+  - edition_number: 7
+    metadata_file: "metadata/0007.json"
+    data_uris: ["ipfs://.../orchard-pass-007.mp4"]
+    data_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    meta_uris: ["ipfs://.../0007.json"]
+    meta_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    license_uris: []
+    license_hash: ""
+
+  - edition_number: 8
+    metadata_file: "metadata/0008.json"
+    data_uris: ["ipfs://.../orchard-pass-008.mp4"]
+    data_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    meta_uris: ["ipfs://.../0008.json"]
+    meta_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    license_uris: []
+    license_hash: ""
+
+  - edition_number: 9
+    metadata_file: "metadata/0009.json"
+    data_uris: ["ipfs://.../orchard-pass-009.mp4"]
+    data_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    meta_uris: ["ipfs://.../0009.json"]
+    meta_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    license_uris: []
+    license_hash: ""
+
+  - edition_number: 10
+    metadata_file: "metadata/0010.json"
+    data_uris: ["ipfs://.../orchard-pass-010.mp4"]
+    data_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    meta_uris: ["ipfs://.../0010.json"]
+    meta_hash: "0000000000000000000000000000000000000000000000000000000000000000"
+    license_uris: []
+    license_hash: ""

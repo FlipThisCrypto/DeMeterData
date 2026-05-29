@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-05-29 — Phase 6: Orchard Pass NFTs
+
+Richard's direction: **mint 10 video NFTs as the first 10 Season Passes** — credentials with real artistic identity, not just functional metadata. Each Pass is a short video; holding a Pass is the on-chain claim that lets a wallet register a Tree and harvest $JUICE.
+
+### Shipped
+
+- **Wallet RPC client** at `orchard_chia/wallet/rpc.py` — TLS-wrapped HTTPS to the reference wallet on port 9256, mutual cert auth. Surfaces just what we need: `get_wallets`, `get_next_address`, `nft_mint_nft`, `nft_get_nfts`, `nft_get_info`. Reusable by Phase 7 payout.
+- **CHIP-7 metadata generator** at `orchard_chia/nft/generate.py`. Pure functions: `build_collection_metadata`, `build_pass_metadata`, `canonical_json`, `sha256_hex`, `sha256_of_file`, `write_genesis_batch`. Genesis collection id locked to `f9a0c0a0-0001-4000-8000-000000000001` so every Pass and the on-chain ownership check reference the same value. Genesis attributes per Pass: `Pass Number`, `Generation=Genesis`, `Tier=Founder`, `Reward Token=$JUICE`, `Node Type=ESP32-class Tree`, `Network=Chia Mainnet`.
+- **Mint pipeline** at `orchard_chia/nft/mint.py`. Reads a YAML mint plan (per-Pass URIs + hashes), validates it (address shape, hex-length, missing URIs, duplicate edition numbers, missing metadata files), calls `nft_mint_nft` for each entry, writes per-mint result to `nft/mint_results.json`.
+- **Mint plan template** at `nft/mint_plan.example.yaml` with all 10 passes prefilled with placeholders. Operator copies to `mint_plan.yaml`, fills URIs + hashes after uploading to IPFS / nft.storage / Pinata.
+- **Verify helper** at `orchard_chia/nft/verify.py` — pages every NFT in a wallet, returns Passes by matching the collection id. v1 limitation: works only when operator's wallet and oracle's wallet daemon are on the same machine; v1.1 would use Spacescan / Mintgarden for cross-machine.
+- **CLI entry point** at `orchard_chia/nft/__main__.py` — subcommands `generate`, `validate`, `mint`, `verify`. Documented in `nft/README.md`.
+- **Generated content**: `nft/collection.json` + `nft/metadata/0001.json..0010.json` written by `python -m orchard_chia.nft generate`. Committed so anyone forking the repo can see exactly what the Genesis batch describes.
+- **13 hermetic tests** in `orchard_chia/tests/test_nft.py`. All 39 tests pass across all components (oracle 6, dashboard 11, datalayer 9, nft 13).
+
+### Decisions
+
+- **Mint all 10 to issuer wallet first**, then distribute via standard NFT transfers as operators register. Cleaner than collecting 10 recipient addresses upfront, and matches typical Chia genesis batch patterns.
+- **Royalty 0%** because credentials shouldn't be priced as collectibles, but every parameter is per-plan-overridable.
+- **Soft separation between content (`nft/`) and behavior (`orchard_chia/nft/`).** The JSON files in `nft/metadata/` are committed artifacts so anyone can verify their content matches what gets minted on-chain. The Python is what regenerates and ships them.
+- **Oracle `/register` gate deferred to Phase 6.5** — the verify helper is ready but the oracle integration adds a chunk of wiring and depends on a cross-machine ownership story we don't have yet. Keeps Phase 6 tight.
+
+### Awaiting operator action
+
+- 10 short videos.
+- Upload to IPFS (recommended: nft.storage).
+- Compute SHA-256 of each video and each metadata JSON.
+- Fill `nft/mint_plan.yaml` with URIs + hashes.
+- `python -m orchard_chia.nft mint --plan nft/mint_plan.yaml`.
+
+Once those 10 mints land, The Orchard has its founding credentials on-chain.
+
+---
+
 ## 2026-05-29 — 🌳 First on-chain attestation landed on Chia DataLayer
 
 ```

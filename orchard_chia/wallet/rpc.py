@@ -1,0 +1,153 @@
+# SPDX-License-Identifier: Apache-2.0
+"""TLS-wrapped HTTP client for the Chia reference wallet RPC.
+
+Default port is 9256. mutual-TLS via the operator's wallet cert + key,
+which are referenced by absolute path in ``orchard_chia/config.yaml``.
+
+Used by:
+  - orchard_chia.nft.mint    — mints Orchard Pass NFTs (nft_mint_nft)
+  - orchard_chia.nft.verify  — checks NFT ownership for the oracle's
+                                /register gate
+  - orchard_chia.payout      — builds $JUICE CAT spend bundles (Phase 7)
+"""
+from __future__ import annotations
+
+import requests
+import urllib3
+
+# Self-signed local CA — silence the legitimate-but-noisy warning.
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+class WalletRpcError(RuntimeError):
+    """Raised for any non-2xx wallet RPC response or transport failure."""
+
+
+class WalletRpc:
+    def __init__(self, host: str, port: int, cert_path: str, key_path: str,
+                 fingerprint: int = 0):
+        self._host = host
+        self._port = port
+        self._cert = (cert_path, key_path)
+        self._fingerprint = fingerprint
+
+    def _url(self, route: str) -> str:
+        return f"https://{self._host}:{self._port}/{route.lstrip('/')}"
+
+    def _post(self, route: str, body: dict, timeout: int = 60) -> dict:
+        try:
+            r = requests.post(
+                self._url(route),
+                json=body,
+                cert=self._cert,
+                verify=False,
+                timeout=timeout,
+            )
+        except requests.RequestException as e:
+            raise WalletRpcError(f"wallet {route} unreachable: {e}") from e
+        if r.status_code != 200:
+            raise WalletRpcError(f"wallet {route} -> {r.status_code}: {r.text}")
+        data = r.json()
+        if not data.get("success", True):
+            raise WalletRpcError(f"wallet {route} success=false: {data}")
+        return data
+
+    # ------------------------------------------------------------------
+    # Discovery / identity
+    # ------------------------------------------------------------------
+
+    def get_wallets(self, wallet_type: int | None = None) -> list[dict]:
+        """List all wallets in the current key. ``wallet_type``:
+            0 = standard XCH
+            6 = CAT
+            9 = DID
+            10 = NFT
+        """
+        body: dict = {}
+        if wallet_type is not None:
+            body["type"] = wallet_type
+        return self._post("get_wallets", body).get("wallets", [])
+
+    def first_nft_wallet_id(self) -> int:
+        """Return the wallet_id of the first NFT wallet, creating one
+        lazily if needed isn't supported here — the reference wallet
+        usually auto-creates an NFT wallet on first NFT receipt.
+        """
+        wallets = self.get_wallets(wallet_type=10)
+        if not wallets:
+            raise WalletRpcError(
+                "no NFT wallet found. Create one in the Chia wallet GUI / CLI: "
+                "`chia wallet show` then follow prompts to enable NFT support."
+            )
+        return int(wallets[0]["id"])
+
+    def get_next_address(self, wallet_id: int = 1) -> str:
+        body = {"wallet_id": wallet_id, "new_address": False}
+        return self._post("get_next_address", body)["address"]
+
+    # ------------------------------------------------------------------
+    # NFT minting
+    # ------------------------------------------------------------------
+
+    def nft_mint_nft(
+        self,
+        *,
+        wallet_id: int,
+        target_address: str,
+        royalty_address: str,
+        uris: list[str],
+        meta_uris: list[str],
+        hash: str,             # noqa: A002 — Chia's field name
+        meta_hash: str,
+        edition_number: int = 1,
+        edition_total: int = 1,
+        license_uris: list[str] | None = None,
+        license_hash: str = "",
+        royalty_percentage: int = 0,
+        did_id: str | None = None,
+        fee: int = 0,
+    ) -> dict:
+        """Mint a single Chia NFT1 via ``nft_mint_nft`` RPC.
+
+        ``hash`` and ``meta_hash`` are SHA-256 hex of the actual files
+        the URIs point at. The chain stores these hashes alongside the
+        URIs so consumers can verify the URI contents haven't drifted.
+
+        Returns the RPC response (includes ``spend_bundle`` and the
+        new ``nft_id`` once the spend is processed by the full node).
+        """
+        body: dict = {
+            "wallet_id": wallet_id,
+            "target_address": target_address,
+            "royalty_address": royalty_address,
+            "uris": uris,
+            "meta_uris": meta_uris,
+            "license_uris": license_uris or [],
+            "hash": hash,
+            "meta_hash": meta_hash,
+            "license_hash": license_hash,
+            "edition_number": edition_number,
+            "edition_total": edition_total,
+            "royalty_percentage": royalty_percentage,
+            "fee": fee,
+        }
+        if did_id:
+            body["did_id"] = did_id
+        return self._post("nft_mint_nft", body, timeout=180)
+
+    # ------------------------------------------------------------------
+    # NFT discovery (used by ownership verification)
+    # ------------------------------------------------------------------
+
+    def nft_get_nfts(self, wallet_id: int, start_index: int = 0,
+                    num: int = 50) -> list[dict]:
+        """Page through NFTs owned by a wallet. Each item includes the
+        NFT's metadata URIs, on-chain coin info, and collection hint.
+        """
+        body = {"wallet_id": wallet_id, "start_index": start_index, "num": num}
+        return self._post("nft_get_nfts", body).get("nft_list", [])
+
+    def nft_get_info(self, coin_id: str) -> dict:
+        """Look up a single NFT by its coin id (or launcher id)."""
+        body = {"coin_id": coin_id}
+        return self._post("nft_get_info", body).get("nft_info", {})

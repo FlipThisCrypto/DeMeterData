@@ -1,0 +1,40 @@
+{
+  "format": "CHIP-0007",
+  "name": "Orchard Pass #0005",
+  "description": "Genesis Pass 5 of 10 \u2014 proof of operation for a Tree in The Orchard, an open-source environmental DePIN on Chia. Holder operates one of the first 10 Trees in the network.",
+  "minting_tool": "orchard-mint v0.1",
+  "sensitive_content": false,
+  "series_number": 5,
+  "series_total": 10,
+  "attributes": [
+    {
+      "trait_type": "Pass Number",
+      "value": "0005"
+    },
+    {
+      "trait_type": "Generation",
+      "value": "Genesis"
+    },
+    {
+      "trait_type": "Tier",
+      "value": "Founder"
+    },
+    {
+      "trait_type": "Reward Token",
+      "value": "$JUICE"
+    },
+    {
+      "trait_type": "Node Type",
+      "value": "ESP32-class Tree"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Chia Mainnet"
+    }
+  ],
+  "collection": {
+    "name": "The Orchard \u2014 Genesis Passes",
+    "id": "f9a0c0a0-0001-4000-8000-000000000001",
+    "attributes": []
+  }
+}

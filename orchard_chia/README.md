@@ -26,10 +26,17 @@ orchard_chia/
 │   ├── oracle.py             # HTTP client to the oracle
 │   ├── rpc.py                # TLS-wrapped Chia full-node + DataLayer clients
 │   └── attest.py             # pure functions: build, sign, serialize
-├── wallet/                   # Phase 7 — wallet RPC wrapper (stub)
+├── wallet/                   # Shared Chia wallet RPC client
+│   └── rpc.py                # TLS-wrapped wallet RPC (port 9256)
+├── nft/                      # Phase 6 — Orchard Pass minting + verification  ✅
+│   ├── __main__.py           # `python -m orchard_chia.nft {generate|validate|mint|verify}`
+│   ├── generate.py           # CHIP-7 metadata generator (pure functions)
+│   ├── mint.py               # mint plan loader + nft_mint_nft pipeline
+│   └── verify.py             # wallet-holds-pass ownership check
 ├── payout/                   # Phase 7 — $JUICE batched payout (stub)
 └── tests/
-    └── test_datalayer.py     # 9 hermetic tests for the attest pure-functions
+    ├── test_datalayer.py     # 9 attest pure-function tests
+    └── test_nft.py           # 13 generator + mint-plan-validation tests
 ```
 
 ## Phase 5 — Season attestation writer
@@ -111,5 +118,5 @@ The wallet module will wrap the Chia reference wallet RPC (port 9256) for the bi
 | Phase | Module | Status |
 |-------|--------|--------|
 | 5     | `orchard_chia/datalayer/` | ✅ Implemented + tested + **first on-chain attestation landed 2026-05-29** |
-| 6     | `nft/`                    | ⬜ Not started |
-| 7     | `orchard_chia/wallet/`, `orchard_chia/payout/` | ⬜ Not started |
+| 6     | `orchard_chia/nft/` + `nft/` | ✅ Implemented + tested — generator, mint pipeline, ownership verifier all ready; awaiting video URIs to actually mint |
+| 7     | `orchard_chia/payout/` | ⬜ Not started |
