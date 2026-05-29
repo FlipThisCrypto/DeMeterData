@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-05-29 — Orchard Pass collection identity (banner + icon)
+
+Richard produced and uploaded a banner image and a collection icon to his Filebase IPFS bucket:
+
+- Banner: `https://defiant-black-skink.myfilebase.com/ipfs/QmNvG6xqzPGbH31ZS6wNomAJTSqEFsp43t7CHXaZtKxHmb`
+- Icon:   `https://defiant-black-skink.myfilebase.com/ipfs/QmUWhqeByfKrVAa5Ev3MRymFmhMSoTMnzDwE3Gjd4Cvray`
+
+Added as constants in `orchard_chia/nft/generate.py`. New helper `_collection_attributes()` returns the standard CHIP-7 collection attribute list, used by both `build_collection_metadata()` (for the standalone `nft/collection.json`) and `build_pass_metadata()`'s `collection.attributes` field (so every per-Pass JSON also carries the banner/icon).
+
+Per-Pass inclusion is the maximum-compatibility move — marketplaces like MintGarden and Spacescan that read the per-NFT metadata's collection block will pick up the visuals automatically without a separate "register your collection" step.
+
+Including the banner/icon in each per-Pass JSON changes the bytes → changes the SHA-256 → invalidates the previous `meta_hash` values in `nft/mint_plan.yaml`. Regenerated all 10 metadata files via `python -m orchard_chia.nft generate` and recomputed all 10 hashes; mint_plan updated.
+
+Caught at the right time — we hadn't actually minted yet, so the genesis batch will go on-chain with banner/icon baked in from day one rather than needing a v2 collection later. If we'd already minted, the on-chain NFTs would reference the old hashes (pre-banner/icon) and we'd need to mint a v2 collection.
+
+Operator's next action: upload the regenerated metadata JSONs at `nft/metadata/0001..0010.json` to Filebase, paste the 10 CIDs back, validate, mint.
+
 ## 2026-05-29 — Phase 7: Season harvest ($JUICE payout)
 
 The v1 economic loop is now structurally complete. Phase 7 reads every signed attestation Phase 5 publishes to DataLayer, verifies each one with the oracle's signing key, computes per-Tree rewards, aggregates per recipient wallet, and (in live mode with explicit confirm) sends $JUICE via the Chia reference wallet's `cat_spend` RPC.
