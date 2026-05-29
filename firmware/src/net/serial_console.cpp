@@ -2,10 +2,12 @@
 #include "serial_console.h"
 
 #include <Arduino.h>
+#include <Wire.h>
 
 #include "config.h"
 #include "identity.h"
 #include "oracle.h"
+#include "sensors/gps_neo.h"
 #include "version.h"
 #include "wifi_mgr.h"
 
@@ -80,6 +82,32 @@ void dispatch_(const String& line) {
     } else {
       Serial.println("ERR no sample callback");
     }
+  } else if (cmd == "I2C_SCAN") {
+    // Probe addresses 1..126 on the default Wire bus. Prints every
+    // address that ACKs. Operator runs this when an I2C sensor's
+    // driver `begin()` returns false to figure out whether the
+    // sensor is even on the bus.
+    String result = "OK ";
+    int count = 0;
+    for (uint8_t addr = 1; addr < 127; ++addr) {
+      Wire.beginTransmission(addr);
+      if (Wire.endTransmission() == 0) {
+        char buf[8];
+        snprintf(buf, sizeof(buf), "0x%02X ", addr);
+        result += buf;
+        ++count;
+      }
+    }
+    if (count == 0) result += "(no devices)";
+    Serial.println(result);
+  } else if (cmd == "GPS_RAW") {
+    // Stream raw GPS UART bytes for 3 seconds. Operator runs this
+    // when `satellites: 0` to confirm wiring at the UART level
+    // (NMEA sentences arriving = wires good; silence = wires wrong,
+    // GPS unpowered, or antenna unplugged).
+    Serial.println("OK gps_raw_start");
+    orchard::sensors::gps_dump_raw(3000);
+    Serial.println("OK gps_raw_end");
   } else if (cmd == "REBOOT") {
     Serial.println("OK rebooting");
     Serial.flush();

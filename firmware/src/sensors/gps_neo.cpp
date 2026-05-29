@@ -62,6 +62,19 @@ bool GpsNeoSensor::read(JsonObject out) {
   return true;
 }
 
+void gps_dump_raw(uint32_t duration_ms) {
+  // Drain stale bytes so we capture a fresh window.
+  while (gps_uart.available()) gps_uart.read();
+
+  const uint32_t end_ms = millis() + duration_ms;
+  while (millis() < end_ms) {
+    while (gps_uart.available()) {
+      Serial.write((char)gps_uart.read());
+    }
+    delay(2);
+  }
+}
+
 }  // namespace orchard::sensors
 
 // Self-register.

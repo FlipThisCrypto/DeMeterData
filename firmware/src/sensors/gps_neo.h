@@ -26,4 +26,10 @@ class GpsNeoSensor : public Sensor {
   TinyGPSPlus gps_;
 };
 
+// Diagnostic: drain any pending bytes on the GPS UART, then write
+// every fresh byte that arrives during `duration_ms` straight to the
+// main Serial port. Used by the `GPS_RAW` console command to verify
+// the wiring is correct without any TinyGPS++ parsing in the way.
+void gps_dump_raw(uint32_t duration_ms);
+
 }  // namespace orchard::sensors

@@ -17,6 +17,11 @@
 //   WIFI_CLEAR                 -> "OK"
 //   ORACLE_SET <url>           -> "OK"
 //   SAMPLE_NOW                 -> "OK" (samples sensors + POSTs now)
+//   I2C_SCAN                   -> "OK 0xXX 0xYY ..."  (every responding
+//                                 I2C address) or "OK (no devices)"
+//   GPS_RAW                    -> "OK gps_raw_start" then 3 seconds of
+//                                 raw GPS UART bytes streamed inline,
+//                                 then "OK gps_raw_end"
 //   REBOOT                     -> "OK rebooting"  (then reboots)
 //
 // Any unknown command -> "ERR unknown".

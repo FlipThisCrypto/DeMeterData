@@ -101,8 +101,15 @@ ORACLE_SET http://192.168.1.10:8000/readings
                                 -> OK
 STATUS                          -> OK {...}
 SAMPLE_NOW                      -> OK sampling
+I2C_SCAN                        -> OK 0x76 0x77 ...    (or "OK (no devices)")
+GPS_RAW                         -> OK gps_raw_start
+                                   $GPGSV,...          (3 seconds of raw NMEA)
+                                   ...
+                                   OK gps_raw_end
 REBOOT                          -> OK rebooting
 ```
+
+`I2C_SCAN` and `GPS_RAW` are diagnostic commands — run them when a sensor isn't reading and you need to verify the wires are actually carrying the right thing.
 
 The `KEY` command prints the signing secret in plaintext over USB. **Only do this while the Tree is physically wired to your dashboard PC**, never over a network link, never to a public chat.
 
