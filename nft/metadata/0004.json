@@ -35,6 +35,27 @@
   "collection": {
     "name": "The Orchard \u2014 Genesis Passes",
     "id": "f9a0c0a0-0001-4000-8000-000000000001",
-    "attributes": []
+    "attributes": [
+      {
+        "type": "description",
+        "value": "Founding credentials for The Orchard \u2014 an open-source environmental DePIN on the Chia blockchain. Each Pass is the on-chain identity of a Tree (ESP32-class sensing node). Holders operate the first Trees in the network, collecting verifiable environmental data and earning $JUICE for verified Season uptime. Ten Passes in the genesis batch."
+      },
+      {
+        "type": "twitter",
+        "value": ""
+      },
+      {
+        "type": "website",
+        "value": "https://github.com/FlipThisCrypto/the-orchard"
+      },
+      {
+        "type": "banner",
+        "value": "https://defiant-black-skink.myfilebase.com/ipfs/QmNvG6xqzPGbH31ZS6wNomAJTSqEFsp43t7CHXaZtKxHmb"
+      },
+      {
+        "type": "icon",
+        "value": "https://defiant-black-skink.myfilebase.com/ipfs/QmUWhqeByfKrVAa5Ev3MRymFmhMSoTMnzDwE3Gjd4Cvray"
+      }
+    ]
   }
 }

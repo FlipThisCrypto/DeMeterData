@@ -13,6 +13,14 @@
     {
       "type": "website",
       "value": "https://github.com/FlipThisCrypto/the-orchard"
+    },
+    {
+      "type": "banner",
+      "value": "https://defiant-black-skink.myfilebase.com/ipfs/QmNvG6xqzPGbH31ZS6wNomAJTSqEFsp43t7CHXaZtKxHmb"
+    },
+    {
+      "type": "icon",
+      "value": "https://defiant-black-skink.myfilebase.com/ipfs/QmUWhqeByfKrVAa5Ev3MRymFmhMSoTMnzDwE3Gjd4Cvray"
     }
   ]
 }

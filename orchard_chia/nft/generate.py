@@ -19,11 +19,52 @@ from pathlib import Path
 ORCHARD_GENESIS_COLLECTION_ID = "f9a0c0a0-0001-4000-8000-000000000001"
 ORCHARD_GENESIS_COLLECTION_NAME = "The Orchard — Genesis Passes"
 
+# Collection identity art (pinned on Filebase IPFS). Marketplaces
+# (MintGarden, Spacescan) read these from each Pass's metadata as
+# well as from the standalone collection.json.
+ORCHARD_GENESIS_BANNER_URI = (
+    "https://defiant-black-skink.myfilebase.com/ipfs/"
+    "QmNvG6xqzPGbH31ZS6wNomAJTSqEFsp43t7CHXaZtKxHmb"
+)
+ORCHARD_GENESIS_ICON_URI = (
+    "https://defiant-black-skink.myfilebase.com/ipfs/"
+    "QmUWhqeByfKrVAa5Ev3MRymFmhMSoTMnzDwE3Gjd4Cvray"
+)
+ORCHARD_GENESIS_WEBSITE = "https://github.com/FlipThisCrypto/the-orchard"
+ORCHARD_GENESIS_TWITTER = ""
+
 # How many Passes in the genesis batch.
 GENESIS_TOTAL = 10
 
 # Default minting tool ID; bump on any breaking schema change.
 MINTING_TOOL = "orchard-mint v0.1"
+
+
+def _collection_attributes() -> list[dict]:
+    """Standard collection attributes used by both the standalone
+    collection.json and each per-Pass JSON's ``collection.attributes``
+    field. Including them in both maximizes marketplace compatibility:
+    viewers that can't resolve the collection by id will still pull
+    banner/icon from any individual NFT they see.
+    """
+    return [
+        {
+            "type": "description",
+            "value": (
+                "Founding credentials for The Orchard — an open-source "
+                "environmental DePIN on the Chia blockchain. Each Pass "
+                "is the on-chain identity of a Tree (ESP32-class sensing "
+                "node). Holders operate the first Trees in the network, "
+                "collecting verifiable environmental data and earning "
+                "$JUICE for verified Season uptime. Ten Passes in the "
+                "genesis batch."
+            ),
+        },
+        {"type": "twitter", "value": ORCHARD_GENESIS_TWITTER},
+        {"type": "website", "value": ORCHARD_GENESIS_WEBSITE},
+        {"type": "banner",  "value": ORCHARD_GENESIS_BANNER_URI},
+        {"type": "icon",    "value": ORCHARD_GENESIS_ICON_URI},
+    ]
 
 
 def build_collection_metadata() -> dict:
@@ -35,22 +76,7 @@ def build_collection_metadata() -> dict:
     return {
         "name": ORCHARD_GENESIS_COLLECTION_NAME,
         "id": ORCHARD_GENESIS_COLLECTION_ID,
-        "attributes": [
-            {
-                "type": "description",
-                "value": (
-                    "Founding credentials for The Orchard — an open-source "
-                    "environmental DePIN on the Chia blockchain. Each Pass "
-                    "is the on-chain identity of a Tree (ESP32-class sensing "
-                    "node). Holders operate the first Trees in the network, "
-                    "collecting verifiable environmental data and earning "
-                    "$JUICE for verified Season uptime. Ten Passes in the "
-                    "genesis batch."
-                ),
-            },
-            {"type": "twitter", "value": ""},
-            {"type": "website", "value": "https://github.com/FlipThisCrypto/the-orchard"},
-        ],
+        "attributes": _collection_attributes(),
     }
 
 
@@ -98,7 +124,7 @@ def build_pass_metadata(
         "collection": {
             "name":       ORCHARD_GENESIS_COLLECTION_NAME,
             "id":         ORCHARD_GENESIS_COLLECTION_ID,
-            "attributes": [],
+            "attributes": _collection_attributes(),
         },
     }
 
