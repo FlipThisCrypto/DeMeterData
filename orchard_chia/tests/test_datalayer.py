@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for the pure functions in chia.datalayer.attest.
+"""Tests for the pure functions in orchard_chia.datalayer.attest.
 
 Hermetic — no oracle, no Chia node, no network. We just round-trip the
 build/sign/serialize/parse logic and confirm the DataLayer key/value
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from chia.datalayer import attest
+from orchard_chia.datalayer import attest
 
 
 NODE = "5B9BB022649FA93D4091DA4BA40714B9"

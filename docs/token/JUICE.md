@@ -33,13 +33,13 @@ The token is hardware-first and infrastructure-first: it pays operators for runn
 
 ## How $JUICE is distributed
 
-See [reward economics in the README](../../README.md#reward-model-v1-tunable) and the manual-payout flow in [`../../chia/README.md`](../../chia/README.md). v1 distribution is a manual Season harvest from the issuer wallet; future versions may move to on-chain claim flows (out of scope for v1).
+See [reward economics in the README](../../README.md#reward-model-v1-tunable) and the manual-payout flow in [`../../orchard_chia/README.md`](../../orchard_chia/README.md). v1 distribution is a manual Season harvest from the issuer wallet; future versions may move to on-chain claim flows (out of scope for v1).
 
 ## What's *not* in this file
 
 The operator's wallet fingerprint, wallet id, and wallet label are intentionally **not** documented here. They live in:
 
-- The local `chia/config.yaml` (gitignored)
+- The local `orchard_chia/config.yaml` (gitignored)
 - The local `docs/Juice Token.docx` (gitignored)
 - Memory at `~/.claude/.../memory/project_token_juice_private.md` (local only, not in this repo)
 

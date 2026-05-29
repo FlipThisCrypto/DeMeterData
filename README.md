@@ -63,7 +63,7 @@ The token supports the ecosystem instead of being the ecosystem. See [docs/VISIO
 | **firmware/**   | Tree firmware (ESP32-S3). Modular sensor drivers. WiFi, GPS, signed POSTs, OTA. | [firmware/](firmware/) |
 | **oracle/**     | FastAPI service. Receives readings, stores in SQLite, tracks Season uptime.  | [oracle/](oracle/) |
 | **dashboard/**  | **Orchard View** — local Flask web UI. Scan, view readings, push WiFi/OTA, register Tree. | [dashboard/](dashboard/) |
-| **chia/**       | DataLayer writer + Chia wallet client + manual $JUICE Season-harvest script. | [chia/](chia/) |
+| **orchard_chia/**| DataLayer writer + Chia wallet client + manual $JUICE Season-harvest script. | [orchard_chia/](orchard_chia/) |
 | **nft/**        | **Orchard Pass** NFT collection (CHIP-7 metadata) + mint script.             | [nft/](nft/) |
 | **docs/**       | Wiring diagrams, decision records (ADRs), VISION, LOG of successes & failures. | [docs/](docs/) |
 | **examples/**   | Copy/paste templates so novices can extend (new sensors, new node types).    | [examples/](examples/) |
@@ -88,7 +88,7 @@ See [docs/decisions/0001-v1-architecture.md](docs/decisions/0001-v1-architecture
 | Total supply   | 100,000,000 JUICE                                                    |
 | Issuance       | Single issuance                                                      |
 
-Full token reference: [docs/token/JUICE.md](docs/token/JUICE.md). The Asset ID also lives in `chia/config.example.yaml` — copy to `chia/config.yaml`, fill in your local wallet details, and don't commit your local copy (it's in `.gitignore`).
+Full token reference: [docs/token/JUICE.md](docs/token/JUICE.md). The Asset ID also lives in `orchard_chia/config.example.yaml` — copy to `orchard_chia/config.yaml`, fill in your local wallet details, and don't commit your local copy (it's in `.gitignore`).
 
 ---
 

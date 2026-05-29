@@ -94,7 +94,8 @@ logs/
 *.log
 
 # --- Component-local configs (operator-private, gitignored) ---
-chia/config.yaml
+orchard_chia/config.yaml
+orchard_chia/data/
 oracle/.env
 dashboard/.env
 

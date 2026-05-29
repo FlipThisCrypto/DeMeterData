@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-05-29 — 🌳 First on-chain attestation landed on Chia DataLayer
+
+```
+[orchard.attest] DataLayer batch_update accepted.
+tx_id = 0x0b94a6951c777453936044188b34cfc904a30d909bfdfa7a281badebd1fea171
+```
+
+**Phase 5 went live end-to-end on the real Chia mainnet.** The Orchard published its first signed Season uptime attestation to DataLayer store `d0bb705ed0f9e32fcdae20467e3d64e6aedd9d957b494ae4377ab9c381fd2e37`.
+
+### What landed
+
+- Tree `5B9BB022649FA93D4091DA4BA40714B9` — Season 2, **4 hours of verified uptime**
+- Signed with the oracle's HMAC-SHA256 key
+- Recorded against chia mainnet block height 8,794,728
+- Key in DataLayer: `attest:5B9BB022649FA93D4091DA4BA40714B9:00000002`
+
+### Two problems discovered during the live run, both fixed
+
+1. **Folder-name collision: our `chia/` shadowed (or was shadowed by) the installed `chia-blockchain` package.** Richard's machine has chia-blockchain installed (it has to be — it provides the full-node + DataLayer service). Python found the installed `chia` package at `C:\Python314\Lib\site-packages\chia\__init__.py` first, our local `chia/` had no `__init__.py`, namespace-package vs regular-package rules made the installed one win, and `python -m chia.datalayer` failed with `No module named chia.datalayer`. **Fix:** renamed our folder `chia/` → `orchard_chia/`. All internal imports use relative form so they kept working; the test file (`from chia.datalayer import attest`) was updated to `from orchard_chia.datalayer import attest`. pyproject.toml testpaths updated; .gitignore updated; main README + JUICE.md + module README cross-references updated. Added an `orchard_chia/__init__.py` for good measure so future imports never get tangled with chia-blockchain namespace package detection.
+
+2. **Folder rename was blocked by a file handle.** Initial `git mv chia orchard_chia` failed with `Permission denied`. Diagnosis: Notepad++ had `chia/config.yaml` open AND something else was holding the chia/ directory itself (probably an unrelated explorer window or a stale cwd). Workaround: moved contents file-by-file with `Move-Item`, which the OS permitted; the now-empty folder was then deletable.
+
+### Decision
+
+**Lock in `orchard_chia/` as the permanent name** for our Chia integration package. Anyone replicating this build will have chia-blockchain installed and would hit the same shadowing problem. Documented the rationale in `orchard_chia/README.md`.
+
+---
+
 ## 2026-05-29 — BME280 + GPS investigation deferred until new sensors arrive
 
 ### Where we left it

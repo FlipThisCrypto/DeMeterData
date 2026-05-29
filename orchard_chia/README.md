@@ -1,6 +1,8 @@
-# chia/ — Chia integration
+# orchard_chia/ — Chia integration
 
 All Chia-blockchain-touching code: DataLayer attestation writer (Phase 5, ✅ implemented), wallet RPC client (Phase 7), manual **$JUICE** CAT payout script (Phase 7). Targets the **official Chia reference wallet** RPC (default port 9256).
+
+> **Why the folder name `orchard_chia/`?** The official `chia-blockchain` Python package installs as `chia`. If our folder were also named `chia/`, Python's import resolver would resolve `chia.datalayer` to the installed package instead of ours. Prefixing with `orchard_` guarantees no conflict and makes it obvious whose code this is.
 
 > **Vocabulary:** the code uses `season`/`node`/`attest`. User-facing copy says **Season / Tree / Attestation**. See the [Glossary](../README.md#glossary).
 
@@ -11,13 +13,14 @@ Isolating blockchain-specific code makes it easy to upgrade or replace as the Ch
 ## Layout
 
 ```
-chia/
+orchard_chia/
+├── __init__.py               # makes us a regular package (precedence over namespace)
 ├── README.md
 ├── requirements.txt          # requests, pydantic, pyyaml, pytest
 ├── config.example.yaml       # copy to config.yaml, fill in, never commit
 ├── data/                     # gitignored — local state (signing key, etc.)
 ├── datalayer/                # Phase 5 — Season attestation writer  ✅
-│   ├── __main__.py           # `python -m chia.datalayer`
+│   ├── __main__.py           # `python -m orchard_chia.datalayer`
 │   ├── main.py               # orchestrator
 │   ├── config.py             # YAML loader
 │   ├── oracle.py             # HTTP client to the oracle
@@ -59,25 +62,25 @@ In v1, `data_hash` is a placeholder hash over `(node_id, season, hours_online)`.
 
 ```powershell
 # 1. install deps (same .venv as oracle / dashboard is fine)
-pip install -r chia/requirements.txt
+pip install -r orchard_chia/requirements.txt
 
 # 2. copy + edit config
-copy chia\config.example.yaml chia\config.yaml
-# edit chia\config.yaml — update SSL cert paths, set datalayer.store_id
+copy orchard_chia\config.example.yaml orchard_chia\config.yaml
+# edit orchard_chia\config.yaml — update SSL cert paths, set datalayer.store_id
 
 # 3. (one-time) create a DataLayer store and paste its id into config.yaml
 chia data create_data_store -m 0.0001
 # -> { "id": "<32-byte hex>", ... }
 
 # 4. run the writer (operates on whatever closed Seasons the oracle has)
-python -m chia.datalayer
+python -m orchard_chia.datalayer
 ```
 
 Typical schedule: hourly via Windows Task Scheduler / cron. Daily is also fine; the writer is cheap when there's nothing to do.
 
 ### What the writer does, step by step
 
-1. Load `chia/config.yaml` and the per-oracle signing key (auto-generated on first run; lives at `chia/data/oracle_signing_key.hex`, gitignored).
+1. Load `orchard_chia/config.yaml` and the per-oracle signing key (auto-generated on first run; lives at `orchard_chia/data/oracle_signing_key.hex`, gitignored).
 2. Hit the oracle: `GET /` to find `current_season`, `GET /nodes` for the Tree list, `GET /uptime/{node}/{season}` for each closed Season.
 3. Hit the Chia full node: read `peak_height` so each attestation records the block height it was written at.
 4. For each `(node, season)` with non-zero uptime: build the payload, sign it, hex-encode key+value.
@@ -87,14 +90,14 @@ Typical schedule: hourly via Windows Task Scheduler / cron. Daily is also fine; 
 ### Signing key
 
 - 32 bytes of `secrets.token_hex()` generated on the writer's first run.
-- Persisted at `chia/data/oracle_signing_key.hex` (gitignored).
+- Persisted at `orchard_chia/data/oracle_signing_key.hex` (gitignored).
 - Never transmitted over the network.
 - The same key signs every attestation this oracle ever publishes. If you nuke the file and re-run, all subsequent attestations get a new key — previously-published attestations remain verifiable against the old key, so save a backup if that matters to you.
 
 ### Test it
 
 ```powershell
-pytest chia/tests/
+pytest orchard_chia/tests/
 ```
 
 9 hermetic tests cover: payload shape, sign+verify round-trip, tamper detection, wrong-key rejection, DataLayer key/value determinism, parse-back, edge cases. Tests are pure-function — no network, no Chia node required.
@@ -107,6 +110,6 @@ The wallet module will wrap the Chia reference wallet RPC (port 9256) for the bi
 
 | Phase | Module | Status |
 |-------|--------|--------|
-| 5     | `chia/datalayer/` | ✅ Implemented + tested |
-| 6     | `nft/`           | ⬜ Not started |
-| 7     | `chia/wallet/`, `chia/payout/` | ⬜ Not started |
+| 5     | `orchard_chia/datalayer/` | ✅ Implemented + tested + **first on-chain attestation landed 2026-05-29** |
+| 6     | `nft/`                    | ⬜ Not started |
+| 7     | `orchard_chia/wallet/`, `orchard_chia/payout/` | ⬜ Not started |
