@@ -1,11 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 // Orchard View — vanilla JS for the provisioning wizard and live Tree view.
+//
+// XSS posture: every dynamic value rendered through innerHTML below is
+// passed through esc() first. makeField/makeStep escape their args
+// internally. Sensor values come from Tree firmware POST bodies which
+// are not under our control — a compromised or hostile Tree must not
+// be able to script the operator's (or a public viewer's) browser.
 
 const OrchardView = (() => {
 
   // -------------------------- tiny helpers --------------------------
 
   function $(sel, root = document) { return root.querySelector(sel); }
+
+  // HTML-escape a value for safe inclusion inside an HTML attribute or
+  // element body. Treats null/undefined as empty. Numbers and booleans
+  // are stringified by String(). Anything else gets the five-char
+  // escape table applied.
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;',
+      '"': '&quot;', "'": '&#39;',
+    })[c]);
+  }
 
   async function jget(url) {
     const r = await fetch(url, { method: 'GET' });
@@ -32,13 +50,22 @@ const OrchardView = (() => {
     return `${Math.floor(ageSec / 3600)}h ago`;
   }
 
-  function makeField(k, v) {
-    return `<div class="field"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  // Build a k/v row. Both args are HTML-escaped; pass {mono: true} to
+  // give the value a monospaced font (via class, not by injecting a
+  // <span> wrapper from the caller).
+  function makeField(k, v, opts = {}) {
+    const vCls = opts.mono ? 'v mono' : 'v';
+    const vText = (v === null || v === undefined || v === '') ? '—' : v;
+    return `<div class="field"><div class="k">${esc(k)}</div>` +
+           `<div class="${vCls}">${esc(vText)}</div></div>`;
   }
 
   function makeStep(label, state, msg = '') {
     const icon = state === 'done' ? '✓' : state === 'doing' ? '…' : state === 'err' ? '✗' : '·';
-    return `<div class="step-status ${state}"><span class="icon">${icon}</span> ${label} ${msg ? `<span class="muted">— ${msg}</span>` : ''}</div>`;
+    return `<div class="step-status ${esc(state)}">` +
+           `<span class="icon">${icon}</span> ${esc(label)} ` +
+           (msg ? `<span class="muted">— ${esc(msg)}</span>` : '') +
+           `</div>`;
   }
 
   // -------------------------- provision page -------------------------
@@ -72,16 +99,20 @@ const OrchardView = (() => {
     out.innerHTML = '<div class="muted">Talking to Tree…</div>';
     const r = await jpost('/api/serial/identify', { port });
     if (!r.ok) {
-      out.innerHTML = `<div class="err">${r.body.error || 'failed'}</div>`;
+      out.innerHTML = `<div class="err">${esc(r.body.error || 'failed')}</div>`;
       return;
     }
     identified = { ...r.body, port };
+    // Every dynamic value below is server-controlled (it came from the
+    // Tree over USB) — esc() guards against a malicious Tree firmware
+    // that puts HTML/JS into its identity fields.
+    const sk = r.body.signing_key_hex || '';
     out.innerHTML =
-      makeField('node_id', `<span class="mono">${r.body.node_id}</span>`) +
-      makeField('signing_key', `<span class="mono">${r.body.signing_key_hex.slice(0, 16)}…</span>`) +
-      makeField('fw', r.body.status?.fw || '?') +
-      makeField('wifi', r.body.status?.wifi || '?') +
-      makeField('oracle url', r.body.status?.oracle || '(unset)');
+      makeField('node_id',     r.body.node_id, {mono: true}) +
+      makeField('signing_key', sk ? `${sk.slice(0, 16)}…` : '—', {mono: true}) +
+      makeField('fw',          r.body.status?.fw) +
+      makeField('wifi',        r.body.status?.wifi) +
+      makeField('oracle url',  r.body.status?.oracle || '(unset)');
     $('#step-config').hidden = false;
   }
 
@@ -136,7 +167,7 @@ const OrchardView = (() => {
     setStep(3, 'Trigger first sample', 'done');
 
     setStep(4, 'Done — opening live view…', 'done');
-    setTimeout(() => { window.location.href = `/tree/${identified.node_id}`; }, 800);
+    setTimeout(() => { window.location.href = `/tree/${encodeURIComponent(identified.node_id)}`; }, 800);
   }
 
   function initProvisionPage() {
@@ -169,12 +200,16 @@ const OrchardView = (() => {
     const bme = latest?.payload?.sensors?.bme280;
     const gps = latest?.payload?.sensors?.gps;
 
+    // makeField below escapes every dynamic value — a malicious Tree
+    // firmware cannot inject HTML/JS into the operator's view by
+    // putting markup into a sensor field.
+
     if (mq) {
       $('#mq135-data').innerHTML =
-        makeField('adc_raw', mq.adc_raw?.toFixed?.(1) ?? mq.adc_raw) +
-        makeField('voltage_v', mq.voltage_v?.toFixed?.(3) ?? mq.voltage_v) +
-        makeField('baseline', mq.adc_baseline?.toFixed?.(1) ?? mq.adc_baseline) +
-        makeField('deviation', mq.adc_dev?.toFixed?.(2) ?? mq.adc_dev);
+        makeField('adc_raw',   mq.adc_raw?.toFixed?.(1)      ?? mq.adc_raw) +
+        makeField('voltage_v', mq.voltage_v?.toFixed?.(3)    ?? mq.voltage_v) +
+        makeField('baseline',  mq.adc_baseline?.toFixed?.(1) ?? mq.adc_baseline) +
+        makeField('deviation', mq.adc_dev?.toFixed?.(2)      ?? mq.adc_dev);
     }
     if (bme) {
       $('#bme280-data').innerHTML =
@@ -185,13 +220,13 @@ const OrchardView = (() => {
     }
     if (gps) {
       $('#gps-data').innerHTML =
-        makeField('fix', gps.fix ? 'yes' : 'no') +
+        makeField('fix',        gps.fix ? 'yes' : 'no') +
         makeField('satellites', gps.satellites ?? '—') +
         (gps.fix ? (
-          makeField('lat', gps.lat?.toFixed?.(6) ?? gps.lat) +
-          makeField('lon', gps.lon?.toFixed?.(6) ?? gps.lon) +
+          makeField('lat',   gps.lat?.toFixed?.(6) ?? gps.lat) +
+          makeField('lon',   gps.lon?.toFixed?.(6) ?? gps.lon) +
           makeField('alt_m', gps.alt_m?.toFixed?.(1) ?? gps.alt_m) +
-          makeField('utc', gps.utc || '—')
+          makeField('utc',   gps.utc || '—')
         ) : makeField('age (ms)', gps.fix_age_ms ?? '—'));
     }
 
@@ -200,24 +235,27 @@ const OrchardView = (() => {
       tbody.innerHTML = data.readings.map(r => {
         const m = r.payload?.sensors?.mq135 || {};
         const g = r.payload?.sensors?.gps || {};
-        return `<tr>
-          <td class="mono">${r.received_at}</td>
-          <td>${m.adc_raw?.toFixed?.(1) ?? '—'}</td>
-          <td>${g.fix ? '✓' : '·'}</td>
-          <td>${g.lat?.toFixed?.(4) ?? '—'}</td>
-          <td>${g.lon?.toFixed?.(4) ?? '—'}</td>
-        </tr>`;
+        // Every column escapes; numbers stringify safely, but firmware
+        // could in principle put strings in these fields.
+        return `<tr>` +
+          `<td class="mono">${esc(r.received_at)}</td>` +
+          `<td>${esc(m.adc_raw?.toFixed?.(1) ?? '—')}</td>` +
+          `<td>${g.fix ? '✓' : '·'}</td>` +
+          `<td>${esc(g.lat?.toFixed?.(4) ?? '—')}</td>` +
+          `<td>${esc(g.lon?.toFixed?.(4) ?? '—')}</td>` +
+        `</tr>`;
       }).join('');
     }
 
     if (latest) {
+      // textContent never executes — safe for arbitrary JSON.
       $('#readings-raw').textContent = JSON.stringify(latest.payload, null, 2);
     }
   }
 
   let pollTimer = null;
   async function pollTree() {
-    const r = await jget(`/api/tree/${window.NODE_ID}/latest`);
+    const r = await jget(`/api/tree/${encodeURIComponent(window.NODE_ID)}/latest`);
     if (r.ok) renderTree(r.body);
   }
 

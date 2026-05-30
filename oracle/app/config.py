@@ -15,7 +15,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Runtime configuration. Override via env vars or oracle/.env."""
 
-    host: str = "0.0.0.0"
+    # Default to localhost-only. `/register` accepts any caller with a
+    # node_id + signing key and no auth, so a 0.0.0.0 bind would let
+    # any LAN device pre-claim a node_id and lock out the real Tree.
+    # If you need real Trees on the WiFi to POST signed readings to
+    # this oracle, set ORCHARD_ORACLE_HOST=0.0.0.0 explicitly in your
+    # `.env` AND understand that anyone on the same network can also
+    # call /register.
+    host: str = "127.0.0.1"
     port: int = 8000
     db_url: str = "sqlite:///./oracle/data/orchard.db"
     log_level: str = "info"

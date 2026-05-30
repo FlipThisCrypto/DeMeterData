@@ -67,10 +67,13 @@ pip install -r oracle/requirements.txt
 cp oracle/.env.example oracle/.env
 # edit oracle/.env
 
-# Run
+# Run (binds loopback by default)
 python -m oracle.app.main
-# or
-uvicorn oracle.app.main:app --host 0.0.0.0 --port 8000
+
+# Or if you need real Trees on your LAN to reach it directly:
+# (Security note: /register has no auth — anyone on the same network
+# can claim a node_id. Only use 0.0.0.0 on a trusted LAN.)
+ORCHARD_ORACLE_HOST=0.0.0.0 python -m oracle.app.main
 ```
 
 Open `http://localhost:8000/` to confirm it's up, and `http://localhost:8000/docs` for interactive OpenAPI.

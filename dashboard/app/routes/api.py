@@ -145,6 +145,59 @@ def serial_sample_now():
 
 # --------------------------------------------------------------- live view --
 
+# ~111m precision — good enough to know the Tree is in the right region,
+# bad enough that a public viewer can't pin it to a house.
+PUBLIC_GPS_DECIMALS = 3
+
+
+def _coarsen_coord(v):
+    if v is None:
+        return None
+    try:
+        return round(float(v), PUBLIC_GPS_DECIMALS)
+    except (TypeError, ValueError):
+        return v
+
+
+def _scrub_reading_for_public(r: dict) -> dict:
+    """Return a copy of a reading with operator-sensitive fields removed
+    or coarsened. Used when ``settings().public_mode`` is True so that
+    /api/tree/<id>/latest can be safely exposed via a public tunnel.
+
+    Scrubs:
+      - ``gps_lat`` / ``gps_lon``           (top-level)
+      - ``payload.sensors.gps.{lat,lon}``   (nested, firmware-native form)
+    """
+    out = dict(r)
+    out["gps_lat"] = _coarsen_coord(out.get("gps_lat"))
+    out["gps_lon"] = _coarsen_coord(out.get("gps_lon"))
+    payload = out.get("payload")
+    if isinstance(payload, dict):
+        sensors = payload.get("sensors")
+        if isinstance(sensors, dict):
+            gps = sensors.get("gps")
+            if isinstance(gps, dict):
+                new_gps = dict(gps)
+                for k in ("lat", "lon", "latitude", "longitude"):
+                    if k in new_gps:
+                        new_gps[k] = _coarsen_coord(new_gps[k])
+                new_sensors = dict(sensors)
+                new_sensors["gps"] = new_gps
+                new_payload = dict(payload)
+                new_payload["sensors"] = new_sensors
+                out["payload"] = new_payload
+    return out
+
+
+def _scrub_node_for_public(n: dict) -> dict:
+    """Return a copy of a node record with operator-private fields
+    removed. Used in public mode. ``wallet_address`` couples Tree
+    location to a payout address — leaks doxx + financial linkage."""
+    out = dict(n)
+    out.pop("wallet_address", None)
+    return out
+
+
 @bp.get("/tree/<node_id>/latest")
 def tree_latest(node_id: str):
     node_id = node_id.upper()
@@ -153,6 +206,13 @@ def tree_latest(node_id: str):
         if node is None:
             return _err("unknown node_id", code=404)
         readings = oracle_client.list_readings(node_id, limit=20)
+
+        # In public-demo mode, strip operator-private fields BEFORE any
+        # of the response derivations look at them, so we never leak
+        # them via `latest`, `node`, or the readings list.
+        if settings().public_mode:
+            node = _scrub_node_for_public(node)
+            readings = [_scrub_reading_for_public(r) for r in readings]
 
         current_season = None
         uptime = None

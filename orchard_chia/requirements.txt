@@ -2,6 +2,12 @@
 # Used by chia.datalayer (Phase 5) and chia.payout (Phase 7).
 
 requests>=2.32.0
+# urllib3 is imported directly in orchard_chia/wallet/rpc.py and
+# orchard_chia/datalayer/rpc.py (we call urllib3.disable_warnings).
+# Pin explicitly to 2.7.0+ which fixes CVE-2024-37891 / CVE-2025-50181
+# / CVE-2026-44431 and friends — requests does not floor it high
+# enough.
+urllib3>=2.7.0
 pydantic>=2.7.0
 pydantic-settings>=2.3.0
 pyyaml>=6.0

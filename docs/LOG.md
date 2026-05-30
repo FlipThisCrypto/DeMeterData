@@ -225,7 +225,7 @@ Cadence is rock-solid — the firmware's `ORCHARD_SAMPLE_INTERVAL_MS = 60000` lo
 ### What's working end-to-end
 
 - **Tree firmware on real ESP32-WROOM-32U** — boots cleanly, identity persists in NVS, all three sensor drivers self-register, samples on schedule, signs each payload with HMAC, POSTs over WiFi.
-- **WiFi connection** — Tree's `wifi_mgr` connects to `FlipThisCrypto` SSID with rssi -43 to -48 dBm.
+- **WiFi connection** — Tree's `wifi_mgr` connects to the operator's home SSID with rssi in the -40 to -50 dBm range.
 - **Oracle FastAPI** — listening on 0.0.0.0:8000, accepts signed POSTs (HTTP 202), stores in SQLite at `oracle/data/orchard.db`.
 - **Per-Tree HMAC verification** — every POST signature verifies against the secret captured at registration.
 - **Orchard View dashboard** — home page shows Tree in the registered-nodes list, live view polls every 5 seconds and renders MQ-135, BME280, and GPS cards plus a recent-readings table.
@@ -248,7 +248,7 @@ Cadence is rock-solid — the firmware's `ORCHARD_SAMPLE_INTERVAL_MS = 60000` lo
 - **`flash read err, 1000` bootloop** on the breakout — initially diagnosed as GPIO 12 strapping pin. eFuse summary later showed `XPD_SDIO_FORCE=True` already set — GPIO 12 was a red herring. With all sensors disconnected the chip boots cleanly on the breakout; the actual bootloop trigger was one of the sensor wires being on a misread S3-column pin label.
 - **Dual-purpose breakout silkscreen** — Freenove "Breakout Board for ESP32/ESP32-S3 v1.1" has TWO labels per hole (S3 column + ESP32 column). Operator was reading the S3 column but had a classic ESP32 installed. The GPS wires were going to NC holes on the ESP32 side. Re-routed: GPS through chip pins 18/19 directly, power via the breakout's 5V/GND.
 - **Windows Firewall blocking inbound 8000** — added `New-NetFirewallRule ... -LocalPort 8000 -Profile Private`, later added a Public-profile rule too in case the WiFi adapter ever gets reclassified.
-- **Tree was POSTing to `192.168.1.10` (the `.env.example` placeholder)** — pydantic-settings reads `dashboard/.env`, not `dashboard/.env.example`. Operator edited the wrong file → dashboard used hardcoded default → wrong URL pushed to Tree at provisioning. Fixed by `ORACLE_SET http://192.168.0.223:8000/readings` over serial. Operator separately copied `.env.example` → `.env` so future provisionings push the right URL.
+- **Tree was POSTing to the `.env.example` placeholder IP** — pydantic-settings reads `dashboard/.env`, not `dashboard/.env.example`. Operator edited the wrong file → dashboard used hardcoded default → wrong URL pushed to Tree at provisioning. Fixed by sending `ORACLE_SET http://<oracle-host-on-LAN>:8000/readings` over serial. Operator separately copied `.env.example` → `.env` so future provisionings push the right URL.
 
 ### Decisions
 - **Phase 9 (breakout integration task) closes with the loop closed.** GPS data path is still pending but is a sensor-side investigation, not blocking.

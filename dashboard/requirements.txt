@@ -1,6 +1,9 @@
 # The Orchard — Orchard View (local dashboard) dependencies.
 
-flask>=3.0.0
+# flask floor 3.1.3 closes CVE-2026-27205 (cache key leak on cookie-
+# bearing responses without Vary). A stale wheel cache could otherwise
+# resolve an unpatched version.
+flask>=3.1.3
 requests>=2.32.0
 pyserial>=3.5
 pydantic>=2.7.0
