@@ -4,14 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Orchard View{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark">The Orchard</span>
-      <span class="brand-sub">/ View</span>
-    </div>
+    <a class="brand" href="{{ url_for('dashboard.index') }}" style="text-decoration:none">
+      <img class="brand-logo"
+           src="{{ url_for('static', filename='img/icon.png') }}"
+           alt="The Orchard">
+      <span class="brand-text">
+        <span class="brand-mark">THE ORCHARD</span>
+        <span class="brand-sub">Grow · Connect · Earn</span>
+      </span>
+    </a>
     <nav>
       <a href="{{ url_for('dashboard.index') }}">Trees</a>
       <a href="{{ url_for('provision.provision_page') }}">Plant a Tree</a>
@@ -19,8 +25,10 @@
   </header>
   <main>{% block body %}{% endblock %}</main>
   <footer>
-    The Orchard — open-source DePIN on Chia.
-    <a href="https://github.com/FlipThisCrypto/the-orchard" target="_blank">GitHub</a>
+    Open-source environmental DePIN on Chia ·
+    <a href="https://github.com/FlipThisCrypto/the-orchard" target="_blank">GitHub</a> ·
+    <a href="https://mintgarden.io/collections/col1a56lp9zufakywlq4k5nntu3nd7k6jy2pe6ee23046ydlahmungqslvmj29" target="_blank">Genesis Passes</a>
+    <span class="tagline">You plant. The network grows.</span>
   </footer>
   {% block scripts %}{% endblock %}
 </body>

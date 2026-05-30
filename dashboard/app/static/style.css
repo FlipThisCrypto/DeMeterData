@@ -1,23 +1,69 @@
-/* Orchard View — minimalist dark theme. */
+/* Orchard View — bioluminescent dark theme.
+ *
+ * Palette taken from the on-chain Orchard Pass NFT artwork:
+ * deep navy/black background, citrus-gold fruits, leaf-green canopy,
+ * cyber-cyan circuit traces, holographic-iridescent accent gradient
+ * for titles and primary actions. The goal is for a visitor who knows
+ * the NFTs to recognize the dashboard immediately. */
+
 :root {
-  --bg: #0d1f15;
-  --bg-card: #142621;
-  --bg-card-2: #1a302a;
-  --fg: #f7e8b0;
-  --fg-muted: #9caaa3;
-  --accent: #ff8c42;       /* JUICE orange */
-  --accent-2: #8fde6e;     /* fresh green */
-  --error: #ff7676;
-  --ok: #8fde6e;
-  --border: #1f4030;
+  /* ---- Surfaces ----------------------------------------------------- */
+  --bg:           #06070f;          /* near-black with the faintest navy */
+  --bg-card:      #0e1124;          /* card surface */
+  --bg-card-2:    #161a35;          /* nested surface (pre/result blocks) */
+  --bg-elev:      #1a1f3d;          /* hover state for buttons */
+
+  /* ---- Foreground -------------------------------------------------- */
+  --fg:           #f4e9c5;          /* warm off-white (sunlight on leaves) */
+  --fg-muted:     #8a96b0;          /* cool grey-blue */
+
+  /* ---- Brand accents ----------------------------------------------- */
+  --citrus:       #ffae33;          /* JUICE / fruit body */
+  --citrus-glow:  #ffd23a;          /* fruit highlight */
+  --leaf:         #52e89e;          /* bioluminescent leaf green */
+  --cyber:        #48fff0;          /* circuit-trace cyan */
+  --magenta:      #ff5fb2;          /* holographic edge */
+
+  /* ---- Semantic ---------------------------------------------------- */
+  --accent:       var(--citrus);
+  --accent-2:     var(--leaf);
+  --ok:           var(--leaf);
+  --error:        #ff7676;
+  --border:       #1a1e3a;
+  --border-hot:   #2a3057;
+
+  /* ---- Type -------------------------------------------------------- */
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* ---- Gradients --------------------------------------------------- */
+  --holo: linear-gradient(110deg,
+            #48fff0 0%,
+            #52e89e 30%,
+            #ffd23a 55%,
+            #ff5fb2 80%,
+            #48fff0 100%);
 }
+
+/* ---- Reset / base --------------------------------------------------- */
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
   background: var(--bg);
+  /* Subtle circuit-board texture, inlined so we have zero asset deps.
+     The fill colors map to --border and an even fainter highlight so
+     the pattern reads as ambient circuitry, not foreground noise. */
+  background-image:
+    radial-gradient(ellipse 60% 40% at 50% 0%,
+                    rgba(72, 255, 240, 0.04),
+                    transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 100%,
+                    rgba(82, 232, 158, 0.04),
+                    transparent 70%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><g fill='none' stroke='%231a1e3a' stroke-width='1'><path d='M0 30 H40 V60 H80 V90 H120'/><path d='M0 90 H30 V60 H60 V30 H120'/><path d='M30 0 V20 M60 100 V120 M90 0 V10 M10 60 H20'/></g><g fill='%2348fff0' opacity='0.18'><circle cx='40' cy='30' r='1.2'/><circle cx='80' cy='60' r='1.2'/><circle cx='30' cy='90' r='1.2'/><circle cx='60' cy='30' r='1.2'/></g></svg>");
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-attachment: fixed;
   color: var(--fg);
   font-family: var(--sans);
   font-size: 15px;
@@ -28,95 +74,294 @@ body {
 
 main { flex: 1; max-width: 1100px; margin: 24px auto; padding: 0 20px; width: 100%; }
 
+/* ---- Header / nav -------------------------------------------------- */
+
 header.topbar {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 14px 24px;
-  background: linear-gradient(180deg, #122620 0%, #0d1f15 100%);
+  padding: 12px 24px;
+  background:
+    linear-gradient(180deg, rgba(14,17,36,0.95) 0%, rgba(6,7,15,0.85) 100%);
   border-bottom: 1px solid var(--border);
+  position: relative;
 }
-.brand { display: flex; align-items: baseline; gap: 8px; }
-.brand-mark { font-weight: 700; font-size: 18px; color: var(--accent); letter-spacing: 0.3px; }
-.brand-sub { color: var(--fg-muted); font-size: 14px; }
-nav a { color: var(--fg); text-decoration: none; margin-left: 18px; }
-nav a:hover { color: var(--accent-2); }
+/* Hairline holographic accent under the header. */
+header.topbar::after {
+  content: "";
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: var(--holo);
+  background-size: 200% 100%;
+  opacity: 0.45;
+  animation: holo-shift 14s linear infinite;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-logo {
+  width: 36px; height: 36px; border-radius: 50%;
+  box-shadow:
+    0 0 0 1px rgba(72, 255, 240, 0.35),
+    0 0 14px rgba(72, 255, 240, 0.25),
+    0 0 28px rgba(255, 95, 178, 0.18);
+}
+.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.brand-mark {
+  font-weight: 700; font-size: 18px; letter-spacing: 0.6px;
+  background: var(--holo);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  animation: holo-shift 9s linear infinite;
+}
+.brand-sub {
+  color: var(--fg-muted); font-size: 11px;
+  letter-spacing: 2.5px; text-transform: uppercase;
+}
+
+nav a {
+  color: var(--fg); text-decoration: none; margin-left: 18px;
+  font-size: 14px; letter-spacing: 0.4px;
+  position: relative; padding-bottom: 3px;
+}
+nav a:hover { color: var(--cyber); }
+nav a:hover::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: var(--cyber);
+  box-shadow: 0 0 8px var(--cyber);
+}
 
 footer {
-  padding: 14px 24px; color: var(--fg-muted); font-size: 13px;
+  padding: 16px 24px; color: var(--fg-muted); font-size: 13px;
   border-top: 1px solid var(--border); text-align: center;
 }
-footer a { color: var(--accent-2); }
+footer a { color: var(--leaf); }
+footer .tagline {
+  display: block; margin-top: 4px; font-size: 11px;
+  letter-spacing: 3px; text-transform: uppercase;
+  color: var(--cyber); opacity: 0.7;
+}
 
-h1 { margin: 0 0 14px 0; font-size: 26px; }
-h2 { margin: 0 0 10px 0; font-size: 18px; color: var(--accent); }
-h3 { margin: 0 0 8px 0; font-size: 15px; color: var(--accent-2); letter-spacing: 0.5px; text-transform: uppercase; }
+/* ---- Typography ---------------------------------------------------- */
+
+h1 {
+  margin: 0 0 16px 0; font-size: 26px; letter-spacing: 0.4px;
+  background: var(--holo);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  animation: holo-shift 11s linear infinite;
+}
+h2 {
+  margin: 0 0 12px 0; font-size: 17px;
+  color: var(--citrus);
+  letter-spacing: 0.5px; text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(255, 174, 51, 0.25);
+}
+h3 {
+  margin: 0 0 8px 0; font-size: 12px;
+  color: var(--cyber);
+  letter-spacing: 1.6px; text-transform: uppercase;
+}
+
+/* ---- Hero (index page) -------------------------------------------- */
+
+.hero {
+  display: block; margin: 0 0 24px 0; position: relative;
+  border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--border-hot);
+  box-shadow:
+    0 0 0 1px rgba(72, 255, 240, 0.15),
+    0 12px 40px rgba(0, 0, 0, 0.55);
+}
+.hero img { display: block; width: 100%; height: auto; }
+.hero::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg,
+                              transparent 60%,
+                              rgba(6, 7, 15, 0.55) 100%);
+  pointer-events: none;
+}
+
+/* ---- Cards --------------------------------------------------------- */
 
 .card {
-  background: var(--bg-card);
+  background:
+    linear-gradient(180deg, rgba(22,26,53,0.6) 0%, rgba(14,17,36,0.85) 100%);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 18px 20px;
   margin: 14px 0;
+  position: relative;
+  backdrop-filter: blur(2px);
 }
+/* Holographic top hairline so each card echoes the NFT's frame. */
+.card::before {
+  content: ""; position: absolute; left: 12px; right: 12px; top: -1px;
+  height: 1px;
+  background: var(--holo);
+  background-size: 200% 100%;
+  opacity: 0.55;
+  border-radius: 1px;
+  animation: holo-shift 13s linear infinite;
+}
+
 .row { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
-
-a { color: var(--accent-2); }
-.muted { color: var(--fg-muted); }
-.ok { color: var(--ok); }
-.err { color: var(--error); }
-pre { background: var(--bg-card-2); border: 1px solid var(--border); border-radius: 8px;
-      padding: 12px; overflow-x: auto; font-family: var(--mono); font-size: 13px;
-      color: var(--fg); }
-.mono { font-family: var(--mono); }
-
-label { display: block; margin: 10px 0; color: var(--fg-muted); font-size: 13px; }
-input, select {
-  display: block; margin-top: 4px;
-  background: var(--bg); color: var(--fg);
-  border: 1px solid var(--border); border-radius: 6px;
-  padding: 8px 10px; font-family: var(--sans); font-size: 14px;
-  min-width: 260px;
-}
-input:focus, select:focus { outline: 2px solid var(--accent-2); outline-offset: 1px; }
-
-button, .btn {
-  background: var(--bg-card-2); color: var(--fg);
-  border: 1px solid var(--border); border-radius: 6px;
-  padding: 8px 14px; font-family: var(--sans); font-size: 14px;
-  cursor: pointer; text-decoration: none;
-  transition: background 0.12s ease, border-color 0.12s ease;
-}
-button:hover, .btn:hover { background: #1f4030; }
-button.primary, .btn.primary {
-  background: var(--accent); color: #2a1300; border-color: var(--accent); font-weight: 600;
-}
-button.primary:hover { background: #ffae6e; }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
-th { color: var(--accent-2); font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; }
-table.trees td.mono, table.readings td:nth-child(1) { font-family: var(--mono); font-size: 13px; }
-
-.status { display: flex; align-items: center; gap: 14px; }
-.dot { font-size: 26px; line-height: 1; }
-.dot-grey { color: #506961; }
-.dot-green { color: var(--accent-2); }
-.dot-red { color: var(--error); }
-
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
 
-.result, #provision-progress { margin-top: 12px; padding: 10px 12px;
-  border: 1px dashed var(--border); border-radius: 6px; min-height: 30px;
-  background: var(--bg-card-2); }
+/* ---- Inline elements ---------------------------------------------- */
+
+a { color: var(--leaf); }
+a:hover { color: var(--cyber); }
+.muted { color: var(--fg-muted); }
+.ok  { color: var(--ok); }
+.err { color: var(--error); }
+
+pre {
+  background: var(--bg-card-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--fg);
+}
+.mono { font-family: var(--mono); }
+
+/* ---- Forms --------------------------------------------------------- */
+
+label {
+  display: block; margin: 12px 0; color: var(--fg-muted); font-size: 13px;
+  letter-spacing: 0.3px;
+}
+input, select {
+  display: block; margin-top: 5px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--sans); font-size: 14px;
+  min-width: 260px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--cyber);
+  box-shadow:
+    0 0 0 1px var(--cyber),
+    0 0 14px rgba(72, 255, 240, 0.4);
+}
+
+/* ---- Buttons ------------------------------------------------------- */
+
+button, .btn {
+  background: var(--bg-card-2);
+  color: var(--fg);
+  border: 1px solid var(--border-hot);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-family: var(--sans); font-size: 14px;
+  cursor: pointer; text-decoration: none;
+  letter-spacing: 0.3px;
+  transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+button:hover, .btn:hover {
+  background: var(--bg-elev);
+  border-color: var(--cyber);
+  box-shadow: 0 0 12px rgba(72, 255, 240, 0.18);
+}
+button.primary, .btn.primary {
+  position: relative;
+  background: linear-gradient(180deg, var(--citrus-glow) 0%, var(--citrus) 100%);
+  color: #2a1300;
+  border: 1px solid var(--citrus);
+  font-weight: 700;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow:
+    0 0 0 1px rgba(255, 174, 51, 0.4),
+    0 0 18px rgba(255, 174, 51, 0.35);
+}
+button.primary:hover, .btn.primary:hover {
+  background: linear-gradient(180deg, #ffe072 0%, #ffbf52 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 210, 58, 0.7),
+    0 0 26px rgba(255, 210, 58, 0.55);
+}
+button:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+
+/* ---- Tables -------------------------------------------------------- */
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+th {
+  color: var(--cyber);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1.4px;
+  border-bottom-color: var(--border-hot);
+}
+table.trees tr:hover td { background: rgba(72, 255, 240, 0.03); }
+table.trees td.mono, table.readings td:nth-child(1) {
+  font-family: var(--mono); font-size: 13px;
+}
+
+/* ---- Status dot --------------------------------------------------- */
+
+.status { display: flex; align-items: center; gap: 16px; }
+.dot { font-size: 30px; line-height: 1; }
+.dot-grey  { color: #404a64; }
+.dot-green {
+  color: var(--leaf);
+  text-shadow:
+    0 0 6px var(--leaf),
+    0 0 18px rgba(82, 232, 158, 0.55);
+  animation: pulse 2.2s ease-in-out infinite;
+}
+.dot-red {
+  color: var(--error);
+  text-shadow: 0 0 10px rgba(255, 118, 118, 0.6);
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1;   filter: drop-shadow(0 0 6px rgba(82, 232, 158, 0.7)); }
+  50%      { opacity: 0.75; filter: drop-shadow(0 0 14px rgba(82, 232, 158, 0.9)); }
+}
+
+/* ---- Result / progress blocks (provision wizard) ------------------ */
+
+.result, #provision-progress {
+  margin-top: 12px; padding: 10px 12px;
+  border: 1px dashed var(--border-hot);
+  border-radius: 6px;
+  min-height: 30px;
+  background: var(--bg-card-2);
+}
 .result .field { display: flex; gap: 8px; padding: 3px 0; font-size: 13px; }
-.result .field .k { color: var(--fg-muted); min-width: 130px; }
+.result .field .k { color: var(--fg-muted); min-width: 130px; letter-spacing: 0.3px; }
 .result .field .v { font-family: var(--mono); }
 
 .step-status { padding: 4px 0; font-size: 13px; }
 .step-status .icon { display: inline-block; width: 18px; }
 .step-status.pending .icon { color: var(--fg-muted); }
-.step-status.doing .icon { color: var(--accent); }
-.step-status.done .icon { color: var(--ok); }
-.step-status.err .icon { color: var(--error); }
+.step-status.doing   .icon { color: var(--citrus); }
+.step-status.done    .icon { color: var(--ok); }
+.step-status.err     .icon { color: var(--error); }
 
-details.raw summary { cursor: pointer; color: var(--fg-muted); margin: 14px 0 6px 0; }
+details.raw summary {
+  cursor: pointer; color: var(--fg-muted); margin: 14px 0 6px 0;
+  letter-spacing: 0.4px;
+}
+details.raw summary:hover { color: var(--cyber); }
+
+/* ---- Holographic shimmer animation -------------------------------- */
+
+@keyframes holo-shift {
+  0%   { background-position:   0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* ---- Small-screen tweaks ----------------------------------------- */
+
+@media (max-width: 640px) {
+  header.topbar { padding: 10px 14px; }
+  .brand-sub { display: none; }
+  main { padding: 0 12px; margin: 14px auto; }
+  h1 { font-size: 22px; }
+  .hero { border-radius: 10px; }
+}
