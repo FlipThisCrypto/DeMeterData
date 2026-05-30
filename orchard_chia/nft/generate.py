@@ -14,10 +14,28 @@ import hashlib
 import json
 from pathlib import Path
 
-# Stable UUID for The Orchard — Genesis Passes collection. Generated
-# once and locked here so every mint references the same id.
-ORCHARD_GENESIS_COLLECTION_ID = "f9a0c0a0-0001-4000-8000-000000000001"
-ORCHARD_GENESIS_COLLECTION_NAME = "The Orchard — Genesis Passes"
+# CHIP-7 collection.id for the on-chain genesis batch.
+#
+# Note on history: this is the UUID mintgarden-studio generated when
+# Richard minted the genesis batch through its UI on 2026-05-30. Our
+# original local generator used a different UUID, but since the chain
+# is the source of truth we adopt the on-chain value here so that
+# verify.py matches NFTs minted with either tool from now on.
+#
+# The corresponding marketplace-canonical (bech32) collection id is in
+# ORCHARD_GENESIS_COLLECTION_BECH32_ID below — that's what shows up in
+# mintgarden URLs and in the wallet RPC's top-level "collection.id".
+ORCHARD_GENESIS_COLLECTION_ID = "96ae1978-1a69-4f1c-ad24-f5ac66d02811"
+ORCHARD_GENESIS_COLLECTION_BECH32_ID = (
+    "col1a56lp9zufakywlq4k5nntu3nd7k6jy2pe6ee23046ydlahmungqslvmj29"
+)
+# On-chain name uses ASCII hyphen (mintgarden-studio's default).
+ORCHARD_GENESIS_COLLECTION_NAME = "The Orchard - Genesis Passes"
+# DID of the minting account on the chain — used by oracle/payout when
+# they need to cryptographically confirm a Pass was issued by us.
+ORCHARD_GENESIS_CREATOR_DID = (
+    "did:chia:10g777py7u3yj2uytdd7a0537ajkkdap9yk9jau5g7n27vvf3s7jqrfamq3"
+)
 
 # Collection identity art (pinned on Filebase IPFS). Marketplaces
 # (MintGarden, Spacescan) read these from each Pass's metadata as
@@ -30,7 +48,7 @@ ORCHARD_GENESIS_ICON_URI = (
     "https://defiant-black-skink.myfilebase.com/ipfs/"
     "QmUWhqeByfKrVAa5Ev3MRymFmhMSoTMnzDwE3Gjd4Cvray"
 )
-ORCHARD_GENESIS_WEBSITE = "https://github.com/FlipThisCrypto/the-orchard"
+ORCHARD_GENESIS_WEBSITE = "https://fiendstudios.com/"
 # Twitter is the handle alone, not the URL — matches how
 # mintgarden-studio generates collection metadata. URL form causes
 # some marketplaces' parsers to bail.

@@ -4,6 +4,58 @@
 
 ---
 
+## 2026-05-30 — Genesis collection live on chain
+
+The Orchard — Genesis Passes (10 NFTs) are minted and indexed on MintGarden.
+
+- **Collection (bech32):** `col1a56lp9zufakywlq4k5nntu3nd7k6jy2pe6ee23046ydlahmungqslvmj29`
+- **Collection (CHIP-7 UUID):** `96ae1978-1a69-4f1c-ad24-f5ac66d02811`
+- **Browse:** https://mintgarden.io/collections/col1a56lp9zufakywlq4k5nntu3nd7k6jy2pe6ee23046ydlahmungqslvmj29
+- **Creator DID:** `did:chia:10g777py7u3yj2uytdd7a0537ajkkdap9yk9jau5g7n27vvf3s7jqrfamq3`
+- **Minter address:** `xch1yq9grysxg3tjx5drgjg2f9rps9njd34gl3c0g5x3gyhyq9lmyhlqhh8997`
+- **Royalty:** 10% (1000 BP).
+- **Per-Pass `data_hash` and `license_hash`:** match the values in our `nft/mint_plan.yaml` byte-for-byte — same compressed videos, same License PDF as we prepared locally.
+
+### What went wrong with our own tooling
+
+We made two mint attempts via `orchard_chia.nft mint`:
+
+1. **First attempt** — failed all 10 with `Failed to convert b'' from type bytes to bytes32`. Root cause: Chia's wallet RPC parses `license_hash` as bytes32 and rejects empty strings. Fixed in `wallet/rpc.py` by only including `license_uris` / `license_hash` in the request body when non-empty.
+
+2. **Second attempt** — Pass 1 minted successfully (the on-chain Pass that became one of the two we later burned), but Passes 2-10 failed with `DID is not currently spendable`. DID-bound NFT wallets re-spend the DID coin on every mint and the replacement coin doesn't become spendable until the previous mint confirms. Fix attempt: refactored `mint_batch` to call `nft_mint_bulk` (single tx → DID spent once).
+
+3. **Third attempt (nft_mint_bulk)** — the bulk endpoint produced one duplicate of Pass 1 instead of the intended editions 2-10. Inferred cause: interaction between the per-item `edition_number` in `metadata_list` and the top-level `mint_number_start`. We could not get consistent behavior out of `nft_mint_bulk` on the DID-bound wallet within a reasonable iteration window.
+
+After attempt 3, we had 2 broken on-chain NFTs (both Pass #0001, old metadata that included `series_number` / `series_total` / `sensitive_content` — fields MintGarden's parser appears to choke on, causing video playback to fall back to image-only).
+
+### What worked
+
+Richard burned the 2 broken NFTs and minted all 10 via **mintgarden-studio** (the web UI). It handles bulk minting through its own backend without exposing the DID-spendability foot-gun.
+
+### Code we kept anyway
+
+- **`build_pass_metadata()`** generator — still useful for future collections (Beta, Season 2 prestige) where we don't want a hosted-studio dependency.
+- **`mint_batch()`** with individual `nft_mint_nft` + 90 s delay — proven path for single mints; useful for Pass-style emergencies and for the Phase 7 $JUICE CAT spends.
+- **`nft_transfer_nft` wallet RPC** — needed for any future operator-to-operator NFT delivery.
+- **`mint_plan.yaml`** — the operator's record of what each Pass was supposed to be. data_hash/license_hash values matching the on-chain ones is itself a useful provenance artifact.
+
+### Code that we updated to reflect the on-chain reality
+
+- `ORCHARD_GENESIS_COLLECTION_ID` → `"96ae1978-1a69-4f1c-ad24-f5ac66d02811"` (was a placeholder UUID we generated locally).
+- Added `ORCHARD_GENESIS_COLLECTION_BECH32_ID` constant.
+- Added `ORCHARD_GENESIS_CREATOR_DID` constant.
+- `ORCHARD_GENESIS_COLLECTION_NAME` switched from em-dash to ASCII hyphen ("The Orchard - Genesis Passes") to match mintgarden-studio's encoding.
+- `ORCHARD_GENESIS_WEBSITE` switched from the GitHub repo to `https://fiendstudios.com/` (matches the on-chain `website` attribute).
+- `verify.py` now accepts either the UUID or the bech32 id when matching ownership — different wallet RPCs and indexers surface different forms of the same collection.
+
+### Open items
+
+- The minting wallet (`xch1yq9grys...`) is mintgarden-studio's; the 10 Passes need to be transferred to the operator's main wallet (`xch1m3rvtj86...`) before they can be used as Tree credentials. Use the mintgarden-studio UI or `nft_transfer_nft`.
+- 10% royalty is a mintgarden-studio default — confirm whether that's what we want for the genesis batch (DePIN founder-credential NFTs are often 0% royalty; 10% would mean the project takes 10% of any secondary sale).
+- The two burned NFTs are on chain forever, but no longer in any wallet.
+
+---
+
 ## 2026-05-29 — Orchard Pass collection identity (banner + icon)
 
 Richard produced and uploaded a banner image and a collection icon to his Filebase IPFS bucket:

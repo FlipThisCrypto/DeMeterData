@@ -15,7 +15,10 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from .generate import ORCHARD_GENESIS_COLLECTION_ID
+from .generate import (
+    ORCHARD_GENESIS_COLLECTION_ID,
+    ORCHARD_GENESIS_COLLECTION_BECH32_ID,
+)
 from ..wallet.rpc import WalletRpc, WalletRpcError
 
 
@@ -55,6 +58,16 @@ def _nft_collection_id(nft_info: dict) -> str | None:
     return None
 
 
+def _matches_genesis(cid: str | None) -> bool:
+    """Accept either the CHIP-7 UUID or the bech32 marketplace id —
+    different RPCs / indexers surface different forms of the same
+    on-chain collection, and we want both to satisfy ownership."""
+    if not cid:
+        return False
+    return cid in (ORCHARD_GENESIS_COLLECTION_ID,
+                   ORCHARD_GENESIS_COLLECTION_BECH32_ID)
+
+
 def wallet_holds_pass(rpc: WalletRpc, *, nft_wallet_id: int,
                      collection_id: str = ORCHARD_GENESIS_COLLECTION_ID,
                      ) -> bool:
@@ -66,7 +79,11 @@ def wallet_holds_pass(rpc: WalletRpc, *, nft_wallet_id: int,
     allow-when-uncheckable) at the call site.
     """
     for nft in _iter_owned_nfts(rpc, nft_wallet_id):
-        if _nft_collection_id(nft) == collection_id:
+        nft_cid = _nft_collection_id(nft)
+        if collection_id == ORCHARD_GENESIS_COLLECTION_ID:
+            if _matches_genesis(nft_cid):
+                return True
+        elif nft_cid == collection_id:
             return True
     return False
 
@@ -77,6 +94,10 @@ def list_owned_passes(rpc: WalletRpc, *, nft_wallet_id: int,
     """Like wallet_holds_pass but returns all matching NFT records."""
     out: list[dict] = []
     for nft in _iter_owned_nfts(rpc, nft_wallet_id):
-        if _nft_collection_id(nft) == collection_id:
+        nft_cid = _nft_collection_id(nft)
+        if collection_id == ORCHARD_GENESIS_COLLECTION_ID:
+            if _matches_genesis(nft_cid):
+                out.append(nft)
+        elif nft_cid == collection_id:
             out.append(nft)
     return out
