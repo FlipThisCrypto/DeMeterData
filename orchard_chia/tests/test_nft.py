@@ -27,9 +27,12 @@ def test_pass_metadata_basic():
     p = generate.build_pass_metadata(pass_number=1)
     assert p["format"] == "CHIP-0007"
     assert p["name"] == "Orchard Pass #0001"
-    assert p["series_number"] == 1
-    assert p["series_total"] == generate.GENESIS_TOTAL
-    assert p["sensitive_content"] is False
+    assert p["minting_tool"] == generate.MINTING_TOOL
+    # series_* and sensitive_content are intentionally omitted to match
+    # the mintgarden-studio reference shape.
+    assert "series_number" not in p
+    assert "series_total" not in p
+    assert "sensitive_content" not in p
     # Collection reference matches the collection metadata.
     assert p["collection"]["id"] == generate.ORCHARD_GENESIS_COLLECTION_ID
     # Standard genesis attributes are present.
@@ -86,8 +89,8 @@ def test_write_genesis_batch(tmp_path: Path):
         p = tmp_path / f"{n:04d}.json"
         assert p.exists()
         doc = json.loads(p.read_text(encoding="utf-8"))
-        assert doc["series_number"] == n
-        assert doc["series_total"] == 10
+        assert doc["name"] == f"Orchard Pass #{n:04d}"
+        assert doc["collection"]["id"] == generate.ORCHARD_GENESIS_COLLECTION_ID
         assert doc["collection"]["id"] == generate.ORCHARD_GENESIS_COLLECTION_ID
 
 

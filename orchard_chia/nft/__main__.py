@@ -117,7 +117,8 @@ def _cmd_mint(args) -> int:
 
     rpc = _wallet_rpc_from_config()
     results_path = plan_path.parent / "mint_results.json"
-    summary = mint.mint_batch(rpc, plan, results_path)
+    summary = mint.mint_batch(rpc, plan, results_path,
+                              delay_seconds=args.delay_seconds)
     return 0 if summary["minted_failed"] == 0 else 2
 
 
@@ -155,6 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     p_mint.add_argument("--editions", default=None,
                         help="filter passes by edition_number — '2-10', "
                              "'1,3,5', '7'. Defaults to all passes in the plan.")
+    p_mint.add_argument("--delay-seconds", type=int, default=90,
+                        help="seconds to wait between individual mints "
+                             "(default 90; needed for DID-bound NFT wallets).")
     p_mint.set_defaults(func=_cmd_mint)
 
     p_ver = sub.add_parser("verify", help="check NFT wallet for Pass ownership")

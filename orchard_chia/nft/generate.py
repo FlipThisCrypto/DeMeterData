@@ -31,7 +31,10 @@ ORCHARD_GENESIS_ICON_URI = (
     "QmUWhqeByfKrVAa5Ev3MRymFmhMSoTMnzDwE3Gjd4Cvray"
 )
 ORCHARD_GENESIS_WEBSITE = "https://github.com/FlipThisCrypto/the-orchard"
-ORCHARD_GENESIS_TWITTER = "https://x.com/FiendStudios"
+# Twitter is the handle alone, not the URL — matches how
+# mintgarden-studio generates collection metadata. URL form causes
+# some marketplaces' parsers to bail.
+ORCHARD_GENESIS_TWITTER = "FiendStudios"
 
 # How many Passes in the genesis batch.
 GENESIS_TOTAL = 10
@@ -47,6 +50,9 @@ def _collection_attributes() -> list[dict]:
     viewers that can't resolve the collection by id will still pull
     banner/icon from any individual NFT they see.
     """
+    # Order matches the structure produced by mintgarden-studio:
+    # description, icon, banner, twitter, website. Some marketplace
+    # parsers are order-sensitive when discovering icon/banner.
     return [
         {
             "type": "description",
@@ -60,10 +66,10 @@ def _collection_attributes() -> list[dict]:
                 "genesis batch."
             ),
         },
+        {"type": "icon",    "value": ORCHARD_GENESIS_ICON_URI},
+        {"type": "banner",  "value": ORCHARD_GENESIS_BANNER_URI},
         {"type": "twitter", "value": ORCHARD_GENESIS_TWITTER},
         {"type": "website", "value": ORCHARD_GENESIS_WEBSITE},
-        {"type": "banner",  "value": ORCHARD_GENESIS_BANNER_URI},
-        {"type": "icon",    "value": ORCHARD_GENESIS_ICON_URI},
     ]
 
 
@@ -112,18 +118,20 @@ def build_pass_metadata(
     if extra_attributes:
         attributes.extend(extra_attributes)
 
+    # Field order matches the reference produced by mintgarden-studio:
+    # format, minting_tool, name, description, attributes, collection.
+    # Omits sensitive_content / series_number / series_total — those
+    # are CHIP-7-valid but unused by the reference; some marketplaces'
+    # parsers don't expect them and fall back to image-only rendering.
     return {
-        "format":            "CHIP-0007",
-        "name":              name,
-        "description":       description,
-        "minting_tool":      MINTING_TOOL,
-        "sensitive_content": False,
-        "series_number":     pass_number,
-        "series_total":      series_total,
-        "attributes":        attributes,
+        "format":       "CHIP-0007",
+        "minting_tool": MINTING_TOOL,
+        "name":         name,
+        "description":  description,
+        "attributes":   attributes,
         "collection": {
-            "name":       ORCHARD_GENESIS_COLLECTION_NAME,
             "id":         ORCHARD_GENESIS_COLLECTION_ID,
+            "name":       ORCHARD_GENESIS_COLLECTION_NAME,
             "attributes": _collection_attributes(),
         },
     }
