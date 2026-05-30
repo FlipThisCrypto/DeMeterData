@@ -122,15 +122,21 @@ class WalletRpc:
             "royalty_address": royalty_address,
             "uris": uris,
             "meta_uris": meta_uris,
-            "license_uris": license_uris or [],
             "hash": hash,
             "meta_hash": meta_hash,
-            "license_hash": license_hash,
             "edition_number": edition_number,
             "edition_total": edition_total,
             "royalty_percentage": royalty_percentage,
             "fee": fee,
         }
+        # Chia's RPC parses ``license_hash`` as bytes32 — an empty
+        # string fails the conversion (`ValueError: bad bytes32
+        # initializer b''`). Only include license_uris/license_hash
+        # when they actually have content; the same applies to did_id.
+        if license_uris:
+            body["license_uris"] = license_uris
+        if license_hash:
+            body["license_hash"] = license_hash
         if did_id:
             body["did_id"] = did_id
         return self._post("nft_mint_nft", body, timeout=180)
