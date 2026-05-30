@@ -24,6 +24,14 @@ def create_app() -> Flask:
     app.register_blueprint(provision.bp)
     app.register_blueprint(tree.bp)
     app.register_blueprint(api.bp, url_prefix="/api")
+
+    # Make `settings()` available to every Jinja template as ``settings``
+    # — used by base.html to conditionally render the "Plant a Tree"
+    # nav link based on public_mode.
+    @app.context_processor
+    def _inject_settings():
+        return {"settings": settings()}
+
     return app
 
 

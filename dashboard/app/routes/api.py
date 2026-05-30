@@ -7,10 +7,12 @@ mostly static; these endpoints do the work.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from functools import wraps
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, abort, jsonify, request
 
 from .. import oracle_client, tree_serial
+from ..config import settings
 
 bp = Blueprint("api", __name__)
 
@@ -21,6 +23,19 @@ def _ok(data) -> tuple:
 
 def _err(msg: str, code: int = 400) -> tuple:
     return jsonify({"ok": False, "error": msg}), code
+
+
+def _private(fn):
+    """Mark a route as operator-only. Returns 404 in public mode so
+    the route disappears from the surface area entirely — no hints
+    to a public viewer that it exists. We use 404 (not 403) on
+    purpose: the page is meant to be absent, not access-denied."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if settings().public_mode:
+            abort(404)
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 # ---------------------------------------------------------------- oracle ----
@@ -35,6 +50,7 @@ def oracle_status():
 
 
 @bp.post("/oracle/register")
+@_private
 def oracle_register():
     body = request.get_json(silent=True) or {}
     try:
@@ -55,6 +71,7 @@ def oracle_register():
 # ---------------------------------------------------------------- serial ----
 
 @bp.get("/serial/ports")
+@_private
 def serial_ports():
     ports = [{"device": p.device, "description": p.description, "hwid": p.hwid}
              for p in tree_serial.list_ports()]
@@ -62,6 +79,7 @@ def serial_ports():
 
 
 @bp.post("/serial/identify")
+@_private
 def serial_identify():
     """Talk to a Tree, return its identity. Run after the user picks a port."""
     body = request.get_json(silent=True) or {}
@@ -84,6 +102,7 @@ def serial_identify():
 
 
 @bp.post("/serial/wifi")
+@_private
 def serial_wifi():
     body = request.get_json(silent=True) or {}
     port = body.get("port"); ssid = body.get("ssid"); password = body.get("password", "")
@@ -97,6 +116,7 @@ def serial_wifi():
 
 
 @bp.post("/serial/oracle")
+@_private
 def serial_set_oracle():
     body = request.get_json(silent=True) or {}
     port = body.get("port"); url = body.get("url")
@@ -110,6 +130,7 @@ def serial_set_oracle():
 
 
 @bp.post("/serial/sample")
+@_private
 def serial_sample_now():
     body = request.get_json(silent=True) or {}
     port = body.get("port")

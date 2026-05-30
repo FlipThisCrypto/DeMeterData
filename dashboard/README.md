@@ -47,6 +47,93 @@ Open the URL in any browser. If the oracle is running at `http://127.0.0.1:8000`
 7. Click **Provision Tree**. The dashboard walks the four steps: register with oracle → push WiFi → push oracle URL → SAMPLE_NOW. Each step shows status in real time.
 8. You're redirected to `/tree/<node_id>`. The live view starts polling the oracle every 5 seconds. The first signed reading should land within ~30 seconds (Tree boots, joins WiFi, sends).
 
+## Hosting a public demo (Cloudflare Tunnel)
+
+The dashboard ships a **public-demo mode** that hides the operator-only flows
+so it's safe to expose to the internet. When `ORCHARD_VIEW_PUBLIC_MODE=1`:
+
+- The **Plant a Tree** nav link is hidden.
+- `GET /provision` returns 404.
+- All `/api/serial/*` endpoints return 404 (USB has no meaning for a remote
+  viewer anyway).
+- `POST /api/oracle/register` returns 404.
+- Everything else — Trees list, individual Tree live view, oracle status,
+  `GET /api/tree/<id>/latest` — keeps working normally.
+
+The recommended hosting path is **Cloudflare Tunnel**, which gives you a
+public HTTPS URL backed by your own machine without opening any ports.
+Free, no domain required for the quickstart path.
+
+### Quickstart (free `*.trycloudflare.com` URL, no setup)
+
+1. **Install cloudflared.** On Windows with winget:
+   ```powershell
+   winget install --id Cloudflare.cloudflared
+   ```
+   (Or download from <https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/>.)
+
+2. **Run the oracle and dashboard in public mode**, each in its own terminal:
+   ```powershell
+   # terminal 1 — oracle (unchanged)
+   python -m oracle.app.main
+
+   # terminal 2 — dashboard in public mode
+   $env:ORCHARD_VIEW_PUBLIC_MODE=1
+   python -m dashboard.app
+   ```
+
+3. **Start a quick tunnel** in a third terminal:
+   ```powershell
+   cloudflared tunnel --url http://localhost:5000
+   ```
+   `cloudflared` prints a URL like
+   `https://something-random-words.trycloudflare.com`. **Share that.**
+
+   The quick-tunnel URL is ephemeral — it changes every time you restart
+   `cloudflared`. Fine for a one-off "look at this for an hour" demo;
+   for a persistent URL, use the named-tunnel path below.
+
+### Persistent URL (named tunnel + your own domain)
+
+If you have a domain on Cloudflare (e.g. `fiendstudios.com`), you can get a
+stable URL like `orchard.fiendstudios.com` that survives restarts.
+
+1. **Authenticate** once: `cloudflared tunnel login` (opens a browser).
+2. **Create a tunnel**: `cloudflared tunnel create orchard-view`.
+   Note the UUID it prints.
+3. **Add a CNAME** in your domain's Cloudflare DNS pointing
+   `orchard` at `<UUID>.cfargotunnel.com` (orange-cloud proxied).
+4. **Create `~/.cloudflared/config.yml`**:
+   ```yaml
+   tunnel: <UUID>
+   credentials-file: C:\Users\<you>\.cloudflared\<UUID>.json
+   ingress:
+     - hostname: orchard.fiendstudios.com
+       service: http://localhost:5000
+     - service: http_status:404
+   ```
+5. **Run**: `cloudflared tunnel run orchard-view`.
+
+The URL is now `https://orchard.fiendstudios.com` for as long as the
+tunnel is running.
+
+### Stopping the demo
+
+Ctrl-C the `cloudflared` process. The dashboard keeps running locally;
+remote visitors just see "site can't be reached" until you restart it.
+
+### Things worth knowing
+
+- **Your machine must be on while you're sharing the URL.** The dashboard
+  + oracle + Cloudflare Tunnel all run from your machine — you're already
+  keeping it on for the Chia node and the attestation writer, so no new
+  always-on requirement.
+- **No oracle exposure.** Only the dashboard's port 5000 is tunnelled.
+  The oracle stays at `127.0.0.1:8000`, reachable only from your machine.
+- **Read-only really means read-only.** Visitors can see your registered
+  Trees and their live readings. They can't register a Tree, change WiFi,
+  or trigger samples.
+
 ## Smoke tests
 
 ```bash

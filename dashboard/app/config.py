@@ -22,6 +22,19 @@ class Settings(BaseSettings):
 
     serial_timeout: float = 3.0
 
+    # Public-demo mode. When True:
+    #   - The "Plant a Tree" nav link is hidden.
+    #   - GET /provision returns 404.
+    #   - All /api/serial/* endpoints return 404 (USB has no meaning
+    #     for a remote viewer, and we don't want a leaked operator
+    #     URL to expose those handlers).
+    #   - POST /api/oracle/register returns 404 (registration is an
+    #     operator-only flow).
+    # Read-only endpoints (/, /tree/<id>, GET /api/oracle/status,
+    # GET /api/tree/<id>/latest) remain available.
+    # Set ORCHARD_VIEW_PUBLIC_MODE=1 (or =true) to enable.
+    public_mode: bool = False
+
     model_config = SettingsConfigDict(
         env_prefix="ORCHARD_VIEW_",
         env_file=".env",

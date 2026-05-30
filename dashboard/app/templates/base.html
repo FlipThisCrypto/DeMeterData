@@ -20,7 +20,9 @@
     </a>
     <nav>
       <a href="{{ url_for('dashboard.index') }}">Trees</a>
-      <a href="{{ url_for('provision.provision_page') }}">Plant a Tree</a>
+      {% if not settings.public_mode %}
+        <a href="{{ url_for('provision.provision_page') }}">Plant a Tree</a>
+      {% endif %}
     </nav>
   </header>
   <main>{% block body %}{% endblock %}</main>
