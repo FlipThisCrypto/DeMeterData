@@ -192,6 +192,29 @@ class WalletRpc:
             body["did_id"] = did_id
         return self._post("nft_mint_bulk", body, timeout=300)
 
+    def nft_transfer_nft(
+        self,
+        *,
+        wallet_id: int,
+        nft_coin_id: str,
+        target_address: str,
+        fee: int = 0,
+    ) -> dict:
+        """Transfer one NFT to ``target_address``. Used for burning
+        (target = the null-puzzle-hash burn address) and for delivering
+        Passes from the minting wallet to operator wallets.
+
+        ``nft_coin_id`` is the launcher coin id (the ``nft1...`` bech32
+        when run through nft_get_info, or its hex form here).
+        """
+        body = {
+            "wallet_id": wallet_id,
+            "nft_coin_id": nft_coin_id,
+            "target_address": target_address,
+            "fee": fee,
+        }
+        return self._post("nft_transfer_nft", body, timeout=120)
+
     # ------------------------------------------------------------------
     # NFT discovery (used by ownership verification)
     # ------------------------------------------------------------------
