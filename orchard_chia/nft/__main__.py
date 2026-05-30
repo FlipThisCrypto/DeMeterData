@@ -11,7 +11,9 @@ Run:
   python -m orchard_chia.nft generate
   python -m orchard_chia.nft validate --plan nft/mint_plan.yaml
   python -m orchard_chia.nft mint     --plan nft/mint_plan.yaml
-  python -m orchard_chia.nft verify   --wallet-id <int>
+  python -m orchard_chia.nft verify
+  python -m orchard_chia.nft verify --address xch1...
+  python -m orchard_chia.nft verify --wallet-id 4
 """
 from __future__ import annotations
 
@@ -23,6 +25,21 @@ from pathlib import Path
 from . import generate, mint, verify
 from ..datalayer import config as base_config
 from ..wallet.rpc import WalletRpc, WalletRpcError
+
+
+def _operator_address_from_config() -> str | None:
+    """Read the operator's Pass-holding XCH address from config.yaml's
+    ``operator.pass_address`` field, if set. Returns None if absent —
+    caller decides whether that's an error."""
+    import yaml
+    try:
+        raw = yaml.safe_load(
+            base_config.CONFIG_PATH.read_text(encoding="utf-8")) or {}
+    except FileNotFoundError:
+        return None
+    op = raw.get("operator") or {}
+    addr = (op.get("pass_address") or "").strip()
+    return addr or None
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -123,17 +140,45 @@ def _cmd_mint(args) -> int:
 
 
 def _cmd_verify(args) -> int:
-    rpc = _wallet_rpc_from_config()
-    try:
-        passes = verify.list_owned_passes(rpc, nft_wallet_id=args.wallet_id)
-    except WalletRpcError as e:
-        print(f"verify failed: {e}", file=sys.stderr)
-        return 3
-    print(f"wallet_id={args.wallet_id} holds {len(passes)} Orchard Pass(es)")
+    # Resolve which path to use:
+    #   --wallet-id N  -> local wallet RPC (one specific NFT wallet)
+    #   --address X    -> MintGarden indexer (any XCH address)
+    #   neither        -> indexer using config.operator.pass_address
+    if args.wallet_id is not None and args.address:
+        print("specify only one of --wallet-id or --address", file=sys.stderr)
+        return 1
+
+    if args.wallet_id is not None:
+        rpc = _wallet_rpc_from_config()
+        try:
+            passes = verify.list_owned_passes(rpc, nft_wallet_id=args.wallet_id)
+        except WalletRpcError as e:
+            print(f"verify failed (wallet RPC): {e}", file=sys.stderr)
+            return 3
+        label = f"wallet_id={args.wallet_id}"
+    else:
+        address = args.address or _operator_address_from_config()
+        if not address:
+            print(
+                "no address to check. Pass --address xch1... or set "
+                "operator.pass_address in orchard_chia/config.yaml.",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            passes = verify.list_passes_by_address(address)
+        except verify.IndexerError as e:
+            print(f"verify failed (indexer): {e}", file=sys.stderr)
+            return 3
+        label = f"address={address}"
+
+    print(f"{label} holds {len(passes)} Orchard Pass(es)")
     for p in passes:
         nft_id = p.get("nft_coin_id") or p.get("launcher_id") or "<unknown>"
+        name = p.get("name") or ""
         edition = p.get("edition_number") or "?"
-        print(f"  - nft_id={nft_id} edition={edition}")
+        suffix = f"  {name}" if name else ""
+        print(f"  - nft_id={nft_id} edition={edition}{suffix}")
     return 0
 
 
@@ -161,8 +206,20 @@ def main(argv: list[str] | None = None) -> int:
                              "(default 90; needed for DID-bound NFT wallets).")
     p_mint.set_defaults(func=_cmd_mint)
 
-    p_ver = sub.add_parser("verify", help="check NFT wallet for Pass ownership")
-    p_ver.add_argument("--wallet-id", type=int, required=True)
+    p_ver = sub.add_parser(
+        "verify",
+        help="check Pass ownership — by address (chain indexer) or by "
+             "local NFT wallet id (Chia wallet RPC)")
+    p_ver.add_argument("--wallet-id", type=int, default=None,
+                       help="check a specific NFT wallet via local "
+                            "Chia wallet RPC. The Pass must be in a key "
+                            "the running wallet daemon controls.")
+    p_ver.add_argument("--address", default=None,
+                       help="check a specific xch1... address via the "
+                            "MintGarden indexer API. Works for any "
+                            "address regardless of local wallet state. "
+                            "Defaults to operator.pass_address in "
+                            "config.yaml if neither flag is given.")
     p_ver.set_defaults(func=_cmd_verify)
 
     args = parser.parse_args(argv)

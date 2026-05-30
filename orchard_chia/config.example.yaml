@@ -11,6 +11,14 @@ token:
   name: "JUICE"
   asset_id: "285164e6af80202d2b07fa3cc6ae47ff2906029365a83c50fcab25a56b937121"
 
+# ----- Operator identity --------------------------------------------
+# The XCH address that holds your Orchard Pass(es). Used as the
+# default by `python -m orchard_chia.nft verify` (queries MintGarden
+# indexer by address, so this can be in a totally separate key from
+# the wallet daemon's active fingerprint).
+operator:
+  pass_address: ""
+
 # ----- v1 reward parameters (tunable) -------------------------------
 reward:
   daily_rate: 1.0

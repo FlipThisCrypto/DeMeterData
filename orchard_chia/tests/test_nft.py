@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from orchard_chia.nft import generate, mint
+from orchard_chia.nft import generate, mint, verify
 
 
 # ---------------- generate ----------------
@@ -180,3 +180,74 @@ def test_validate_catches_duplicate_edition(tmp_path: Path):
     plan = mint.load_plan(p)
     problems = mint.validate_plan(plan, plan_path=None)
     assert any("duplicate edition_number" in pr for pr in problems)
+
+
+# ---------------- verify (indexer path) ----------------
+
+# Trimmed copy of the real MintGarden response shape — just enough fields
+# to exercise the filter + normalizer without depending on the network.
+_MG_SAMPLE_ITEMS = {
+    "items": [
+        {
+            "id": "032f683dacc4b64fd7e8615d010f010083929dacab70321837becea221a467e9",
+            "encoded_id": "nft1qvhks0dvcjmyl4lgv9wszrcpqzpe98dv4dcryxphhm82ygdyvl5s2xnrd7",
+            "name": "Orchard Pass #0003",
+            "edition_number": 1,
+            "edition_total": 1,
+            "owner_address_encoded_id": "xch1m3rvtj86wzzfjyk5mc7wzpr7h4zkaknm4wte7kg6afleu4f2tfxsr7nk3n",
+            "collection_id": generate.ORCHARD_GENESIS_COLLECTION_BECH32_ID,
+        },
+        {
+            "id": "aaaaaaaa11111111aaaaaaaa11111111aaaaaaaa11111111aaaaaaaa11111111",
+            "encoded_id": "nft1aaaaaaaa11111111aaaaaaaa11111111aaaaaaaa1111111100",
+            "name": "Orchard Pass #0001",
+            "edition_number": 1,
+            "edition_total": 1,
+            # Different owner — should be filtered out.
+            "owner_address_encoded_id": "xch1someoneelse00000000000000000000000000000000000000000000000000",
+            "collection_id": generate.ORCHARD_GENESIS_COLLECTION_BECH32_ID,
+        },
+    ],
+}
+
+
+def _canned_opener(_url: str) -> bytes:
+    return json.dumps(_MG_SAMPLE_ITEMS).encode("utf-8")
+
+
+def test_list_passes_by_address_filters_to_owner():
+    addr = "xch1m3rvtj86wzzfjyk5mc7wzpr7h4zkaknm4wte7kg6afleu4f2tfxsr7nk3n"
+    out = verify.list_passes_by_address(addr, _opener=_canned_opener)
+    assert len(out) == 1
+    p = out[0]
+    assert p["name"] == "Orchard Pass #0003"
+    assert p["edition_number"] == 1
+    assert p["owner_address"] == addr
+    # Bech32 nft_coin_id surfaced for consumers that want a pretty id.
+    assert p["nft_coin_id"].startswith("nft1")
+    # Hex launcher id still available for the wallet RPC path.
+    assert len(p["launcher_id"]) == 64
+    # Tag identifies the source for downstream logging.
+    assert p["_source"] == "mintgarden"
+
+
+def test_list_passes_by_address_other_owner_returns_empty():
+    out = verify.list_passes_by_address(
+        "xch1nobodyownsthisaddress00000000000000000000000000000000000000",
+        _opener=_canned_opener,
+    )
+    assert out == []
+
+
+def test_address_holds_pass_boolean_wrapper():
+    addr = "xch1m3rvtj86wzzfjyk5mc7wzpr7h4zkaknm4wte7kg6afleu4f2tfxsr7nk3n"
+    assert verify.address_holds_pass(addr, _opener=_canned_opener) is True
+    assert verify.address_holds_pass(
+        "xch1nobody00000000", _opener=_canned_opener) is False
+
+
+def test_indexer_error_on_bad_json():
+    def bad_opener(_url: str) -> bytes:
+        return b"<html>oops</html>"
+    with pytest.raises(verify.IndexerError):
+        verify.list_passes_by_address("xch1anything", _opener=bad_opener)

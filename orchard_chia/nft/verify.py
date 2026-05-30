@@ -5,14 +5,29 @@ Used by the oracle's ``/register`` endpoint (Phase 6.5, deferred) and
 the payout script (Phase 7) to gate operator actions on holding a
 Pass.
 
-v1 limitation: this works only when the operator's wallet and the
-oracle's wallet daemon are on the same machine (same key set). True
-cross-machine ownership verification needs a Chia NFT indexer such as
-Spacescan / Mintgarden, or a signed-challenge flow. Documented in the
-README; will be a Phase 6.5 follow-up.
+Two verification paths:
+
+  1) **Local wallet** (``wallet_holds_pass`` / ``list_owned_passes``) —
+     queries the operator's own Chia wallet daemon via mTLS RPC. Fast
+     and trustless when the Pass is in a key the daemon controls.
+
+  2) **Chain indexer** (``list_passes_by_address``) — queries the
+     MintGarden public API by XCH address. Works for ANY address
+     regardless of which local key holds it, so the credential wallet
+     can be a totally separate key from the daemon's active fingerprint.
+     Trust assumption: MintGarden is honestly indexing the chain.
+
+The local-wallet path is preferred when available because it has no
+network dependency on a third party. The indexer path is the right
+default for novice operators who keep credentials and issuance in
+separate wallets (e.g. cold-storage Pass holder + hot-storage attester).
 """
 from __future__ import annotations
 
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import Iterable
 
 from .generate import (
@@ -20,6 +35,19 @@ from .generate import (
     ORCHARD_GENESIS_COLLECTION_BECH32_ID,
 )
 from ..wallet.rpc import WalletRpc, WalletRpcError
+
+
+# MintGarden public REST API. Read-only, no auth.
+MINTGARDEN_API_BASE = "https://api.mintgarden.io"
+# Per-request page size — collection has 10 items so one page covers it;
+# but we page anyway in case the collection grows.
+INDEXER_PAGE_SIZE = 50
+
+
+class IndexerError(RuntimeError):
+    """Raised when the indexer call itself fails (HTTP, timeout, JSON
+    decode). Distinct from `WalletRpcError` so callers can decide
+    policy per source."""
 
 
 def _iter_owned_nfts(rpc: WalletRpc, wallet_id: int,
@@ -101,3 +129,103 @@ def list_owned_passes(rpc: WalletRpc, *, nft_wallet_id: int,
         elif nft_cid == collection_id:
             out.append(nft)
     return out
+
+
+# ----------------------------------------------------------------------
+# Indexer (MintGarden) path
+# ----------------------------------------------------------------------
+
+def _fetch_mintgarden_collection_items(
+    collection_bech32_id: str = ORCHARD_GENESIS_COLLECTION_BECH32_ID,
+    *,
+    api_base: str = MINTGARDEN_API_BASE,
+    page_size: int = INDEXER_PAGE_SIZE,
+    timeout: int = 30,
+    _opener=None,
+) -> list[dict]:
+    """Fetch every NFT in a MintGarden collection.
+
+    MintGarden's API doesn't accept ``page=N`` — it uses opaque
+    cursor-based paging that we don't implement here. So this is a
+    single-page fetch capped at ``page_size`` (default 50). Genesis
+    is 10 items, well within that. If a future collection exceeds
+    50 we'll need to wire cursor pagination via ``from_id`` /
+    ``last_id`` or whatever MintGarden settles on.
+
+    ``_opener`` is a hook for tests — pass a callable ``(url)->bytes``
+    to short-circuit the HTTP call.
+    """
+    url = (f"{api_base}/collections/{collection_bech32_id}/nfts"
+           f"?size={page_size}")
+    try:
+        raw = (_opener(url) if _opener
+               else urllib.request.urlopen(url, timeout=timeout).read())
+    except urllib.error.HTTPError as e:
+        raise IndexerError(f"MintGarden {url} -> HTTP {e.code}") from e
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise IndexerError(f"MintGarden {url} unreachable: {e}") from e
+    try:
+        doc = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise IndexerError(f"MintGarden {url} non-JSON: {e}") from e
+    return list(doc.get("items") or [])
+
+
+def _normalize_indexer_item(item: dict) -> dict:
+    """Make a MintGarden NFT dict look enough like the wallet-RPC one
+    that the caller's display code doesn't have to branch.
+    """
+    return {
+        # Wallet RPC uses 'nft_coin_id'/'launcher_id' (hex). MintGarden
+        # uses 'encoded_id' (nft1... bech32) and 'id' (hex). Surface
+        # both so callers can take whichever they prefer.
+        "nft_coin_id":     item.get("encoded_id"),
+        "launcher_id":     item.get("id"),
+        "name":            item.get("name"),
+        "edition_number":  item.get("edition_number"),
+        "edition_total":   item.get("edition_total"),
+        "owner_address":   item.get("owner_address_encoded_id"),
+        "collection_id":   item.get("collection_id"),
+        "_source":         "mintgarden",
+    }
+
+
+def list_passes_by_address(
+    address: str,
+    *,
+    collection_bech32_id: str = ORCHARD_GENESIS_COLLECTION_BECH32_ID,
+    _opener=None,
+) -> list[dict]:
+    """Return all Orchard Passes currently owned by ``address``.
+
+    Uses the MintGarden public API. Works for any address whether or
+    not the local wallet daemon holds its key. Caller should treat an
+    ``IndexerError`` as "could not verify" — same policy stance as the
+    wallet RPC path.
+    """
+    address = address.strip()
+    items = _fetch_mintgarden_collection_items(collection_bech32_id,
+                                               _opener=_opener)
+    out: list[dict] = []
+    for it in items:
+        owner = it.get("owner_address_encoded_id")
+        if owner and owner == address:
+            out.append(_normalize_indexer_item(it))
+    # Sort by edition_number for stable display.
+    out.sort(key=lambda r: (r.get("edition_number") or 0,
+                            r.get("name") or ""))
+    return out
+
+
+def address_holds_pass(
+    address: str,
+    *,
+    collection_bech32_id: str = ORCHARD_GENESIS_COLLECTION_BECH32_ID,
+    _opener=None,
+) -> bool:
+    """True if ``address`` owns at least one Pass in the collection."""
+    return bool(list_passes_by_address(
+        address,
+        collection_bech32_id=collection_bech32_id,
+        _opener=_opener,
+    ))
