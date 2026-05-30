@@ -70,9 +70,44 @@ def _cmd_validate(args) -> int:
     return 0
 
 
+def _parse_editions(spec: str | None) -> set[int] | None:
+    """Parse '2-10' / '1,3,5' / '7' into a set of edition numbers,
+    or None if spec is empty (= mint everything)."""
+    if not spec:
+        return None
+    out: set[int] = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            for n in range(int(lo), int(hi) + 1):
+                out.add(n)
+        elif part:
+            out.add(int(part))
+    return out
+
+
 def _cmd_mint(args) -> int:
     plan_path = Path(args.plan).resolve()
     plan = mint.load_plan(plan_path)
+
+    selected = _parse_editions(args.editions)
+    if selected is not None:
+        kept = [p for p in plan.passes if p.edition_number in selected]
+        if not kept:
+            print(f"--editions {args.editions!r} selected zero passes from the plan",
+                  file=sys.stderr)
+            return 1
+        plan = mint.MintPlan(
+            collection_id=plan.collection_id,
+            target_address=plan.target_address,
+            royalty_address=plan.royalty_address,
+            royalty_percentage=plan.royalty_percentage,
+            edition_total=plan.edition_total,
+            fee_mojos=plan.fee_mojos,
+            passes=kept,
+        )
+
     problems = mint.validate_plan(plan, plan_path=plan_path)
     if problems and not args.force:
         print("plan has problems; refusing to mint. Pass --force to mint anyway.")
@@ -117,6 +152,9 @@ def main(argv: list[str] | None = None) -> int:
     p_mint.add_argument("--plan", default="nft/mint_plan.yaml")
     p_mint.add_argument("--force", action="store_true",
                         help="mint even if validate() reports problems")
+    p_mint.add_argument("--editions", default=None,
+                        help="filter passes by edition_number — '2-10', "
+                             "'1,3,5', '7'. Defaults to all passes in the plan.")
     p_mint.set_defaults(func=_cmd_mint)
 
     p_ver = sub.add_parser("verify", help="check NFT wallet for Pass ownership")

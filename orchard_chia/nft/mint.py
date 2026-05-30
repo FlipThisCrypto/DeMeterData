@@ -122,37 +122,83 @@ def mint_pass(rpc: WalletRpc, nft_wallet_id: int, plan: MintPlan,
     )
 
 
+def _entry_to_metadata_list_item(entry: MintPlanEntry, edition_total: int) -> dict:
+    """Convert a MintPlanEntry to the dict shape ``nft_mint_bulk``
+    expects per item. Omit empty license fields (Chia rejects empty
+    bytes32 strings)."""
+    m: dict = {
+        "uris": entry.data_uris,
+        "hash": entry.data_hash,
+        "meta_uris": entry.meta_uris,
+        "meta_hash": entry.meta_hash,
+        "edition_number": entry.edition_number,
+        "edition_total": edition_total,
+    }
+    if entry.license_uris:
+        m["license_uris"] = entry.license_uris
+    if entry.license_hash:
+        m["license_hash"] = entry.license_hash
+    return m
+
+
 def mint_batch(rpc: WalletRpc, plan: MintPlan,
                results_path: str | Path) -> dict:
-    """Mint every pass in the plan, write results JSON, return summary."""
+    """Mint every pass in the plan in a single Chia transaction via
+    ``nft_mint_bulk``. The DID (if the NFT wallet is bound to one) is
+    spent exactly once for the whole batch, sidestepping the "DID is
+    not currently spendable" error individual calls hit.
+    """
     nft_wallet_id = rpc.first_nft_wallet_id()
+    sorted_passes = sorted(plan.passes, key=lambda e: e.edition_number)
     print(f"[orchard.nft.mint] NFT wallet_id: {nft_wallet_id}")
-    print(f"[orchard.nft.mint] minting {len(plan.passes)} passes...")
-
-    results: list[dict] = []
-    for entry in sorted(plan.passes, key=lambda e: e.edition_number):
+    print(f"[orchard.nft.mint] minting {len(sorted_passes)} pass(es) "
+          f"as a single nft_mint_bulk transaction...")
+    for entry in sorted_passes:
         print(f"  + pass {entry.edition_number}/{plan.edition_total} -> "
               f"{entry.data_uris[0] if entry.data_uris else '?'}")
-        try:
-            resp = mint_pass(rpc, nft_wallet_id, plan, entry)
+
+    metadata_list = [
+        _entry_to_metadata_list_item(e, plan.edition_total)
+        for e in sorted_passes
+    ]
+    target_list = [plan.target_address] * len(sorted_passes)
+
+    results: list[dict] = []
+    try:
+        resp = rpc.nft_mint_bulk(
+            wallet_id=nft_wallet_id,
+            metadata_list=metadata_list,
+            royalty_address=plan.royalty_address,
+            royalty_percentage=plan.royalty_percentage,
+            target_list=target_list,
+            mint_number_start=sorted_passes[0].edition_number,
+            mint_total=plan.edition_total,
+            fee=plan.fee_mojos,
+        )
+        for entry in sorted_passes:
             results.append({
                 "edition_number": entry.edition_number,
                 "ok": True,
-                "wallet_response": resp,
             })
-        except WalletRpcError as e:
-            print(f"    ! FAILED: {e}")
+        # Stash the whole bulk RPC response once at the top so the
+        # operator can pull tx_id / spend_bundle out.
+        bulk_response = resp
+    except WalletRpcError as e:
+        print(f"    ! FAILED (bulk): {e}")
+        for entry in sorted_passes:
             results.append({
                 "edition_number": entry.edition_number,
                 "ok": False,
                 "error": str(e),
             })
+        bulk_response = {"error": str(e)}
 
     summary = {
         "collection_id": plan.collection_id,
         "edition_total": plan.edition_total,
         "minted_ok": sum(1 for r in results if r["ok"]),
         "minted_failed": sum(1 for r in results if not r["ok"]),
+        "bulk_response": bulk_response,
         "results": results,
     }
     Path(results_path).write_text(

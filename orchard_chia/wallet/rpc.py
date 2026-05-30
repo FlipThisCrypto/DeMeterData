@@ -141,6 +141,57 @@ class WalletRpc:
             body["did_id"] = did_id
         return self._post("nft_mint_nft", body, timeout=180)
 
+    def nft_mint_bulk(
+        self,
+        *,
+        wallet_id: int,
+        metadata_list: list[dict],
+        royalty_address: str = "",
+        royalty_percentage: int = 0,
+        target_list: list[str] | None = None,
+        mint_number_start: int = 1,
+        mint_total: int | None = None,
+        did_id: str | None = None,
+        fee: int = 0,
+    ) -> dict:
+        """Mint a batch of NFTs in a single Chia transaction.
+
+        The DID (if the NFT wallet is bound to one) gets spent exactly
+        once for the whole batch, which avoids the "DID is not
+        currently spendable" error you hit firing off individual
+        `nft_mint_nft` calls back-to-back.
+
+        Each entry in ``metadata_list`` is one mint's worth of fields:
+            {
+              "uris":          [data uris],
+              "hash":          "<sha256 hex>",
+              "meta_uris":     [meta uris],
+              "meta_hash":     "<sha256 hex>",
+              "license_uris":  [license uris]      (optional),
+              "license_hash":  "<sha256 hex>"      (optional),
+              "edition_number": <int>,
+              "edition_total":  <int>,
+            }
+
+        ``target_list`` is one address per mint — they don't have to
+        be the same. Omit to send all to the operator's default address.
+        """
+        body: dict = {
+            "wallet_id": wallet_id,
+            "metadata_list": metadata_list,
+            "royalty_address": royalty_address,
+            "royalty_percentage": royalty_percentage,
+            "mint_number_start": mint_number_start,
+            "fee": fee,
+        }
+        if target_list:
+            body["target_list"] = target_list
+        if mint_total is not None:
+            body["mint_total"] = mint_total
+        if did_id:
+            body["did_id"] = did_id
+        return self._post("nft_mint_bulk", body, timeout=300)
+
     # ------------------------------------------------------------------
     # NFT discovery (used by ownership verification)
     # ------------------------------------------------------------------
