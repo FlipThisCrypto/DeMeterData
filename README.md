@@ -126,18 +126,19 @@ User-facing copy uses brand names. Code uses technical equivalents. This table i
 
 ## Quick start
 
-> Setup automation is being written. For now this is a placeholder so you know what's coming.
+> 📖 **End-to-end runbook:** [docs/OPERATOR_QUICKSTART.md](docs/OPERATOR_QUICKSTART.md) walks from "I have a box of parts" → "first signed reading on my dashboard" in about an hour. **Start there if this is your first Tree.**
+
+The TL;DR for someone already comfortable with PlatformIO + Python:
 
 ```bash
 # 1. Clone
 git clone https://github.com/FlipThisCrypto/the-orchard.git
 cd the-orchard
 
-# 2. Install dashboard + oracle (Python 3.11+).
+# 2. Install dashboard + oracle + chia integration (Python 3.11+).
 #    Hash-pinned lockfiles (*.lock, committed) are the production-safe
-#    install. Plain requirements.txt is fine for dev but exposes you
-#    to supply-chain risk if a maintainer of any dep ships a malicious
-#    point release.
+#    install — every transitive dep is pinned to an exact version
+#    and SHA-256 hash, closing supply-chain risk.
 python -m venv .venv
 .venv\Scripts\activate            # Windows
 # source .venv/bin/activate       # macOS / Linux
@@ -151,17 +152,20 @@ pip install --require-hashes -r oracle/requirements.lock \
 #   pip-compile --generate-hashes -o dashboard/requirements.lock  dashboard/requirements.txt
 #   pip-compile --generate-hashes -o orchard_chia/requirements.lock orchard_chia/requirements.txt
 
-# 3. Start the local oracle
+# 3. Flash a Tree (in a separate shell, from firmware/)
+cd firmware
+pio run -t upload --upload-port COM4   # WROOM-32U is the default env
+
+# 4. Start the local oracle
 python -m oracle.app.main         # default: http://localhost:8000
 
-# 4. Start Orchard View (new shell)
+# 5. Start Orchard View (new shell)
 python -m dashboard.app           # default: http://localhost:5000
 
-# 5. Plug your Tree (ESP32) in via USB, open Orchard View, follow the
-#    "Plant a new Tree" wizard.
+# 6. Open http://localhost:5000 → Plant a Tree → follow the wizard.
 ```
 
-Full setup, sensor wiring, and Chia node configuration: see [docs/](docs/).
+Full setup, sensor wiring, Windows-specific gotchas, troubleshooting, and what to expect at the end: **[docs/OPERATOR_QUICKSTART.md](docs/OPERATOR_QUICKSTART.md)**. Per-component deep dives in [firmware/README.md](firmware/README.md), [oracle/README.md](oracle/README.md), [dashboard/README.md](dashboard/README.md), [orchard_chia/README.md](orchard_chia/README.md).
 
 ---
 

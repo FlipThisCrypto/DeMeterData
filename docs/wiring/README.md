@@ -2,21 +2,35 @@
 
 One Markdown file per sensor, plus a top-level pin allocation map. Tables and ASCII diagrams for now; image diagrams welcome as contributions.
 
-## ESP32-S3 pin allocation (Freenove dev board)
+> 📖 **If you're bringing up your first Tree**, use [`docs/OPERATOR_QUICKSTART.md`](../OPERATOR_QUICKSTART.md) instead — it has the pin map for the actual v1 prototype board (WROOM-32U) and an end-to-end bring-up procedure. This directory exists as the canonical per-sensor reference for adding more sensors later.
 
-> **Important:** This board is ESP32-**S3**, not the more common ESP32-WROOM. Pin numbering and behavior differ. Always cross-check against the [Freenove ESP32-S3 pinout PDF](https://store.freenove.com/products/fnk0083).
+## Pin allocation — Classic ESP32 (WROOM-32 / WROOM-32U, v1 prototype)
 
-| Use                  | Pin       | Notes                                  |
-|----------------------|-----------|----------------------------------------|
-| I2C SDA              | GPIO 21   | Shared bus: AHT20, BMP280, BH1750      |
-| I2C SCL              | GPIO 22   | Shared bus                             |
-| GPS UART RX (from GPS TX) | GPIO 4    | UART1 RX                          |
-| GPS UART TX (to GPS RX)   | GPIO 5    | UART1 TX                          |
-| PMS5003 UART RX      | GPIO 16   | UART2 RX (planned)                     |
-| PMS5003 UART TX      | GPIO 17   | UART2 TX (planned)                     |
-| MQ-135 analog        | GPIO 34   | ADC1_CH6, input-only pin               |
+This is the board in the v1 enclosure. Defaults from `firmware/include/pins.h` are **overridden** for this env via build flags in `firmware/platformio.ini`.
 
-Pin assignments are **config**, not hardcoded — see `firmware/include/pins.h` (Phase 2).
+| Use                       | Pin       | Notes                                                                 |
+|---------------------------|-----------|-----------------------------------------------------------------------|
+| I2C SDA                   | GPIO 21   | Shared bus: BME280, AHT20, BMP280, BH1750                             |
+| I2C SCL                   | GPIO 22   | Shared bus                                                            |
+| GPS UART RX (from GPS TX) | GPIO 18   | Overridden in `platformio.ini` — not the pins.h default (4)           |
+| GPS UART TX (to GPS RX)   | GPIO 19   | Overridden in `platformio.ini` — not the pins.h default (5)           |
+| MQ-135 analog             | GPIO 34   | ADC1_CH6, input-only pin                                              |
+| Status LED                | GPIO 2    | Freenove WROOM convention                                             |
+
+## Pin allocation — ESP32-S3 (Freenove S3 dev board, optional)
+
+| Use                       | Pin       | Notes                                  |
+|---------------------------|-----------|----------------------------------------|
+| I2C SDA                   | GPIO 21   | Shared bus                             |
+| I2C SCL                   | GPIO 22   | Shared bus                             |
+| GPS UART RX (from GPS TX) | GPIO 4    | UART1 RX                               |
+| GPS UART TX (to GPS RX)   | GPIO 5    | UART1 TX                               |
+| PMS5003 UART RX           | GPIO 16   | UART2 RX (driver planned)              |
+| PMS5003 UART TX           | GPIO 17   | UART2 TX (driver planned)              |
+| MQ-135 analog             | GPIO 34   | ADC1_CH6, input-only pin               |
+| Status LED                | GPIO 48   | Freenove S3 onboard RGB                |
+
+Pin assignments are **config**, not hardcoded — see `firmware/include/pins.h` for defaults and `firmware/platformio.ini` for per-board overrides via `-D ORCHARD_PIN_*` build flags.
 
 ## Per-sensor wiring files (planned)
 
