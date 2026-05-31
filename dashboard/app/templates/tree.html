@@ -20,6 +20,16 @@
           title="Toggle temperature unit (persists in this browser)">°C</button>
 </section>
 
+<!-- Phase 6.5: Operator credentials. Populated by app.js from
+     data.node.pass_nft_id. When the binding exists, this card shows
+     the bound NFT with a link to MintGarden. When it's null, this
+     card is hidden — legacy nodes with no Pass binding don't get
+     a placeholder. -->
+<section class="card" id="operator-credentials-card" hidden>
+  <h3>Operator credentials</h3>
+  <div id="operator-credentials-body"></div>
+</section>
+
 <!-- One tile per sensor reported by the Tree. Populated by app.js
      from whatever sensor names appear in payload.sensors — known
      ones (mq135, bme280, gps, ds18b20…) get nice labels + formatted

@@ -96,9 +96,42 @@ def _restrict_db_file_perms(db_path: Path) -> None:
               f"profile.", file=sys.stderr)
 
 
+def _migrate_node_pass_columns(eng) -> None:
+    """Add Phase 6.5's pass_nft_id and pass_verified_at columns to an
+    existing `nodes` table that pre-dates them.
+
+    SQLAlchemy's ``create_all()`` is creates-only — it won't add columns
+    to a table that already exists, so an oracle DB started before
+    Phase 6.5 keeps the old shape and every register call would crash
+    on the missing column. Alembic is the right long-term answer; for
+    the v1 PoC we just check inspector output and emit a single
+    additive ALTER TABLE per missing column. Both columns are nullable
+    so the migration is safe regardless of existing data.
+    """
+    from sqlalchemy import inspect, text
+    insp = inspect(eng)
+    if "nodes" not in insp.get_table_names():
+        return  # fresh DB — create_all() will use the new shape directly.
+    existing_cols = {c["name"] for c in insp.get_columns("nodes")}
+    additions: list[str] = []
+    if "pass_nft_id" not in existing_cols:
+        additions.append("ALTER TABLE nodes ADD COLUMN pass_nft_id VARCHAR(128)")
+    if "pass_verified_at" not in existing_cols:
+        additions.append("ALTER TABLE nodes ADD COLUMN pass_verified_at DATETIME")
+    if not additions:
+        return
+    with eng.begin() as conn:
+        for stmt in additions:
+            conn.execute(text(stmt))
+
+
 def create_all() -> None:
     """Called once on app startup. Idempotent."""
-    Base.metadata.create_all(engine())
+    eng = engine()
+    # Pre-existing nodes table is migrated additively before create_all
+    # has a chance to no-op the new columns into existence.
+    _migrate_node_pass_columns(eng)
+    Base.metadata.create_all(eng)
     # Tighten file perms AFTER the DB file exists. SQLAlchemy creates
     # the file on first connection inside create_all().
     db_path = _sqlite_path_from_url(settings().db_url)

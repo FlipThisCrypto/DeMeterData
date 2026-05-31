@@ -49,6 +49,61 @@ def oracle_status():
         return _err(str(e), code=502)
 
 
+@bp.post("/oracle/verify_pass")
+@_private
+def oracle_verify_pass():
+    """Check whether a Chia wallet holds at least one Orchard Pass.
+
+    Hits the same MintGarden indexer the oracle's /register Pass gate
+    uses, so a "verified here" answer is equivalent to a "would
+    register here" answer (both go through the same cache layer in
+    oracle.app.pass_verify). Returning the bound nft_id lets the
+    wizard show the operator WHICH Pass it found, with a link to
+    MintGarden.
+
+    Gated behind @_private — verifying a public address is harmless,
+    but the wizard step it backs is operator-only and the endpoint
+    has no business being in public_mode.
+    """
+    body = request.get_json(silent=True) or {}
+    address = (body.get("wallet_address") or "").strip()
+    if not address:
+        return _err("missing wallet_address", code=400)
+
+    from orchard_chia.nft import verify as nft_verify
+    try:
+        passes = nft_verify.list_passes_by_address(address)
+    except nft_verify.IndexerError as e:
+        return _err(f"indexer error: {e}", code=502)
+
+    if not passes:
+        return _ok({
+            "address":          address,
+            "has_pass":         False,
+            "pass_nft_id":      None,
+            "pass_name":        None,
+            "edition_number":   None,
+            "buy_url":          (
+                "https://mintgarden.io/collections/"
+                "col1a56lp9zufakywlq4k5nntu3nd7k6jy2pe6ee23046ydlahmungqslvmj29"
+            ),
+        })
+
+    # Bind the first Pass — matches the oracle's binding policy.
+    first = passes[0]
+    return _ok({
+        "address":        address,
+        "has_pass":       True,
+        "pass_nft_id":    first.get("nft_coin_id"),
+        "pass_name":      first.get("name"),
+        "edition_number": first.get("edition_number"),
+        "owner_count":    len(passes),
+        "mintgarden_url": (
+            f"https://mintgarden.io/nfts/{first.get('nft_coin_id')}"
+        ),
+    })
+
+
 @bp.post("/oracle/register")
 @_private
 def oracle_register():

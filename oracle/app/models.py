@@ -46,6 +46,24 @@ class Node(Base):
     label: Mapped[str | None] = mapped_column(String(128), nullable=True)
     fw_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
+    # Phase 6.5: Orchard Pass NFT bound to this Tree.
+    #
+    # `pass_nft_id` is the bech32 nft1... identifier of an Orchard Pass
+    # NFT that was verified on chain as owned by `wallet_address` at
+    # registration time. `pass_verified_at` is when that verification
+    # ran. Both nullable so legacy registrations (no wallet provided,
+    # or pre-Phase-6.5 nodes) keep working unchanged.
+    #
+    # When pass_nft_id is set, /register has cryptographic evidence
+    # (via the MintGarden indexer at the moment of registration) that
+    # the operator at wallet_address controlled that NFT. The binding
+    # does NOT auto-update if the Pass is later transferred — verify
+    # again on every state change you care about (Phase 7 payout
+    # re-checks before sending $JUICE).
+    pass_nft_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    pass_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+
     registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_reading_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

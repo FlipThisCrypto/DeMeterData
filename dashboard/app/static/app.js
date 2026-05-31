@@ -100,7 +100,12 @@ const OrchardView = (() => {
     }
   }
 
-  let identified = null;  // { node_id, signing_key_hex, status }
+  let identified = null;   // { node_id, signing_key_hex, status }
+  // After step 2 (Verify Pass), one of:
+  //   { verified: true,  wallet, pass_nft_id, pass_name }
+  //   { verified: false, wallet: null }   <-- skipped
+  // Required to reach step 3.
+  let passDecision = null;
 
   async function onIdentify() {
     const port = $('#port-select').value;
@@ -122,17 +127,73 @@ const OrchardView = (() => {
       makeField('fw',          r.body.status?.fw) +
       makeField('wifi',        r.body.status?.wifi) +
       makeField('oracle url',  r.body.status?.oracle || '(unset)');
+    // Advance to the Pass verification step. Step 3 stays hidden until
+    // step 2 resolves one way or the other.
+    $('#step-pass').hidden = false;
+    $('#step-config').hidden = true;
+  }
+
+  async function onVerifyPass() {
+    const wallet = $('#wallet').value.trim();
+    const out = $('#verify-pass-result');
+    if (!wallet) {
+      out.innerHTML = `<div class="err">Paste a Chia wallet address first.</div>`;
+      return;
+    }
+    out.innerHTML = '<div class="muted">Querying chain via MintGarden…</div>';
+    const r = await jpost('/api/oracle/verify_pass', { wallet_address: wallet });
+    if (!r.ok) {
+      out.innerHTML = `<div class="err">${esc(r.body.error || 'verification failed')}</div>`;
+      return;
+    }
+    if (!r.body.has_pass) {
+      // No Pass at this wallet. Show buy link; don't advance.
+      out.innerHTML =
+        `<div class="err">No Orchard Pass found at ${esc(wallet)}.</div>` +
+        `<div class="muted" style="margin-top:6px">` +
+        `Buy a Pass on ` +
+        `<a href="${esc(r.body.buy_url)}" target="_blank" rel="noopener">MintGarden</a> ` +
+        `and try again, or click <em>Skip</em> to register without a Pass binding.</div>`;
+      passDecision = null;
+      return;
+    }
+    // Has Pass — show the bound NFT and advance.
+    out.innerHTML =
+      `<div class="ok">✓ Orchard Pass verified.</div>` +
+      makeField('pass', r.body.pass_name || '—') +
+      makeField('edition', r.body.edition_number ?? '—') +
+      makeField('nft id', r.body.pass_nft_id || '—', {mono: true}) +
+      `<div class="field"><div class="k">on chain</div><div class="v">` +
+      `<a href="${esc(r.body.mintgarden_url)}" target="_blank" rel="noopener">View on MintGarden →</a>` +
+      `</div></div>`;
+    passDecision = {
+      verified:    true,
+      wallet:      wallet,
+      pass_nft_id: r.body.pass_nft_id,
+      pass_name:   r.body.pass_name,
+    };
+    $('#step-config').hidden = false;
+  }
+
+  function onSkipPass() {
+    passDecision = { verified: false, wallet: null };
+    const out = $('#verify-pass-result');
+    out.innerHTML = `<div class="muted">Skipped — Tree will register without a Pass binding. ` +
+      `You can re-run provisioning later with a wallet address to attach one.</div>`;
     $('#step-config').hidden = false;
   }
 
   async function onProvision() {
     const port = identified?.port;
     if (!identified) return;
+    if (!passDecision) {
+      alert('Verify your Orchard Pass first (or click Skip).');
+      return;
+    }
     const ssid = $('#ssid').value.trim();
     const password = $('#password').value;
     const oracleUrl = $('#oracle-url').value.trim();
     const label = $('#label').value.trim();
-    const wallet = $('#wallet').value.trim();
 
     if (!ssid) { alert('WiFi SSID is required'); return; }
     if (!oracleUrl) { alert('Oracle URL is required'); return; }
@@ -154,11 +215,14 @@ const OrchardView = (() => {
       node_id: identified.node_id,
       signing_key_hex: identified.signing_key_hex,
       label: label || null,
-      wallet_address: wallet || null,
+      wallet_address: passDecision.wallet || null,
       fw_version: identified.status?.fw || null,
     });
     if (!r.ok) { setStep(0, 'Register with oracle', 'err', r.body.error || `HTTP ${r.status}`); btn.disabled = false; return; }
-    setStep(0, 'Register with oracle', 'done', r.body.register?.new ? 'new' : 'updated');
+    const regMsg = r.body.register?.pass_nft_id
+      ? `Pass bound: ${r.body.register.pass_nft_id.slice(0, 16)}…`
+      : (r.body.register?.new ? 'new' : 'updated');
+    setStep(0, 'Register with oracle', 'done', regMsg);
 
     setStep(1, 'Push WiFi credentials', 'doing');
     r = await jpost('/api/serial/wifi', { port, ssid, password });
@@ -182,6 +246,8 @@ const OrchardView = (() => {
   function initProvisionPage() {
     $('#refresh-ports').addEventListener('click', refreshPorts);
     $('#identify-btn').addEventListener('click', onIdentify);
+    $('#verify-pass-btn').addEventListener('click', onVerifyPass);
+    $('#skip-pass-btn').addEventListener('click', onSkipPass);
     $('#provision-btn').addEventListener('click', onProvision);
     refreshPorts();
   }
@@ -453,6 +519,34 @@ const OrchardView = (() => {
       .join("");
   }
 
+  // Render the Operator credentials card from data.node.pass_nft_id.
+  // Hidden entirely when no Pass is bound — legacy/unverified nodes
+  // shouldn't show an empty placeholder.
+  function renderOperatorCredentials(node) {
+    const card = $('#operator-credentials-card');
+    const body = $('#operator-credentials-body');
+    if (!card || !body) return;
+    const nftId = node?.pass_nft_id;
+    if (!nftId) {
+      card.hidden = true;
+      body.innerHTML = '';
+      return;
+    }
+    card.hidden = false;
+    const mgUrl = `https://mintgarden.io/nfts/${encodeURIComponent(nftId)}`;
+    const verifiedAt = node.pass_verified_at
+      ? relativeAge(node.pass_verified_at)
+      : '—';
+    body.innerHTML =
+      makeField('pass nft', nftId, {mono: true}) +
+      makeField('verified', verifiedAt) +
+      `<div class="field">` +
+        `<div class="k">on chain</div>` +
+        `<div class="v"><a href="${esc(mgUrl)}" target="_blank" rel="noopener">` +
+        `View on MintGarden →</a></div>` +
+      `</div>`;
+  }
+
   function renderTree(data) {
     const aliveDot = $('#alive-light');
     const aliveLbl = $('#alive-label');
@@ -468,6 +562,8 @@ const OrchardView = (() => {
     if (data.uptime) {
       $('#uptime-line').textContent = `Uptime this Season: ${data.uptime.hours_online} / 24 hours`;
     }
+
+    renderOperatorCredentials(data.node);
 
     const latest = data.latest;
     const sensors = latest?.payload?.sensors ?? {};

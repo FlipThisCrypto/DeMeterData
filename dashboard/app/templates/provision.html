@@ -16,15 +16,26 @@
   <div id="identify-result" class="result"></div>
 </section>
 
+<section class="card" id="step-pass" hidden>
+  <h2>2. Verify your Orchard Pass</h2>
+  <p>An <strong>Orchard Pass</strong> NFT is the on-chain credential that proves you operate a Tree on this network. Paste the Chia wallet address that holds your Pass; the oracle verifies on chain (via the public MintGarden indexer) and binds the Pass to your Tree.</p>
+
+  <label>Wallet address <span class="muted">(xch1…)</span>
+    <input id="wallet" type="text" placeholder="xch1m3rvtj86wzzfjyk5mc7wzpr7h4zkaknm4wte7kg6afleu4f2tfxsr7nk3n">
+  </label>
+  <div class="row">
+    <button id="verify-pass-btn" class="primary">Verify Pass</button>
+    <button id="skip-pass-btn" type="button">Skip (register without Pass binding)</button>
+  </div>
+  <div id="verify-pass-result" class="result"></div>
+</section>
+
 <section class="card" id="step-config" hidden>
-  <h2>2. Configure the Tree</h2>
+  <h2>3. Configure the Tree</h2>
   <p>The Tree will store WiFi credentials in NVS and start POSTing to the oracle URL you set here.</p>
 
   <label>Label <span class="muted">(optional)</span>
     <input id="label" type="text" placeholder="e.g. backyard-1">
-  </label>
-  <label>Wallet address <span class="muted">(optional; for $JUICE payouts later)</span>
-    <input id="wallet" type="text" placeholder="xch1...">
   </label>
   <label>WiFi SSID
     <input id="ssid" type="text" placeholder="MyHomeWiFi" required>

@@ -23,6 +23,12 @@ class NodePublic(BaseModel):
     registered_at: datetime
     last_seen_at: datetime | None
     last_reading_at: datetime | None
+    # Phase 6.5: Pass binding. nft_id is the bech32 nft1... id of the
+    # Orchard Pass the operator's wallet held at registration time;
+    # pass_verified_at is when that verification ran. Both null on
+    # legacy registrations (no wallet provided).
+    pass_nft_id: str | None = None
+    pass_verified_at: datetime | None = None
 
 
 def _to_public(n: models.Node) -> NodePublic:
@@ -34,6 +40,8 @@ def _to_public(n: models.Node) -> NodePublic:
         registered_at=n.registered_at,
         last_seen_at=n.last_seen_at,
         last_reading_at=n.last_reading_at,
+        pass_nft_id=n.pass_nft_id,
+        pass_verified_at=n.pass_verified_at,
     )
 
 

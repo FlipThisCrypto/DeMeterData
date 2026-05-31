@@ -428,27 +428,30 @@ In the dashboard browser tab:
 3. Click **Identify Tree**. The page should show:
    - `node_id` — 32 hex characters, unique to your board.
    - `signing_key` — first 16 hex characters of the device's HMAC signing secret.
-   - `fw` — the firmware version (`0.1.0`).
+   - `fw` — the firmware version (`0.3.0` or newer).
    - `wifi`, `oracle url` — both should currently be unset.
-4. Fill in:
+4. **Verify your Orchard Pass** (new step as of Phase 6.5):
+   - An **Orchard Pass** is the on-chain NFT credential proving you operate a Tree on this network. Paste the `xch1…` wallet address that holds your Pass.
+   - Click **Verify Pass**. The dashboard queries the MintGarden indexer; if the wallet holds a Pass you'll see a green confirmation showing the bound NFT (e.g. *Orchard Pass #0001*) and a link to view it on MintGarden.
+   - If you don't own a Pass yet: click the **MintGarden** link to acquire one and try again, or click **Skip** to register without a binding. (Skipped registrations work but won't earn `$JUICE` once the network's payout phase ramps up.)
+5. Fill in the configuration step:
    - **Label** — a friendly name (optional). E.g. `backyard-1`.
-   - **Wallet address** — leave blank for now (will be required for the public network once Phase 6.5 lands).
    - **WiFi SSID** — your home WiFi name.
    - **WiFi password** — your home WiFi password.
    - **Oracle URL** — what the Tree should POST to. If you went with **Option B** in step 8, this should be `http://192.168.1.42:8000/readings` (your PC's LAN IP). If Option A, the Tree won't be able to reach the Oracle and we'll cover the workaround in troubleshooting.
-5. Click **Provision Tree**.
+6. Click **Provision Tree**.
 
-The wizard runs four steps, each showing live status:
+The wizard runs four steps, each showing live status. If you bound a Pass, the first step shows the bound NFT id alongside:
 
 ```
-✓ Register with oracle      — new
+✓ Register with oracle      — Pass bound: nft1n00ugdl737xc6ht4y…
 ✓ Push WiFi credentials     —
 ✓ Push oracle URL           —
 ✓ Trigger first sample      —
 ✓ Done — opening live view…
 ```
 
-You're now redirected to `/tree/<your-node-id>`.
+You're now redirected to `/tree/<your-node-id>`. If you bound a Pass, that page now shows an **Operator credentials** card with a link back to the NFT on MintGarden.
 
 ---
 

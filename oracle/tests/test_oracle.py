@@ -180,3 +180,194 @@ def test_post_reading_happy_path_and_retrieve(client: TestClient):
 def test_uptime_for_unknown_node(client: TestClient):
     r = client.get(f"/uptime/{NODE_ID}/1")
     assert r.status_code == 404
+
+
+# ---------------- Phase 6.5: Orchard Pass gating ----------------
+
+# Real-looking values pulled from the on-chain Genesis collection so
+# anyone reading these tests can see them on MintGarden if they want
+# to cross-reference.
+PASS_OWNER_ADDR = "xch1m3rvtj86wzzfjyk5mc7wzpr7h4zkaknm4wte7kg6afleu4f2tfxsr7nk3n"
+PASS_OWNER_NFT_BECH32 = "nft1n00ugdl737xc6ht4yjdc3cer047lcz9actdxfzpxyat3tsu72z0q46g56z"
+NON_OWNER_ADDR = "xch1nobody00000000000000000000000000000000000000000000000000zz0t"
+
+
+@pytest.fixture()
+def fake_indexer(monkeypatch):
+    """Stub the on-chain Pass-ownership lookup with a controllable
+    in-memory fake. Lets us exercise the /register Pass gate without a
+    real MintGarden round-trip — tests stay hermetic.
+    """
+    from oracle.app import pass_verify
+    pass_verify.clear_cache()
+
+    state = {
+        PASS_OWNER_ADDR: [{
+            "nft_coin_id":    PASS_OWNER_NFT_BECH32,
+            "launcher_id":    "f" * 64,
+            "name":           "Orchard Pass #0001",
+            "edition_number": 1,
+            "owner_address":  PASS_OWNER_ADDR,
+        }],
+        NON_OWNER_ADDR: [],
+    }
+    err = {"raise": None}
+
+    def fake_list(address: str):
+        if err["raise"] is not None:
+            from orchard_chia.nft.verify import IndexerError
+            raise IndexerError(err["raise"])
+        return list(state.get(address, []))
+
+    monkeypatch.setattr(
+        "orchard_chia.nft.verify.list_passes_by_address", fake_list)
+
+    yield {
+        "state":     state,
+        "fail_with": lambda msg: err.__setitem__("raise", msg),
+        "succeed":   lambda: err.__setitem__("raise", None),
+    }
+
+    pass_verify.clear_cache()
+
+
+def test_register_without_wallet_skips_pass_gate(client: TestClient, fake_indexer):
+    """Legacy registration without a wallet still works and leaves the
+    Pass binding null — backward compatible with pre-6.5 nodes."""
+    r = client.post(
+        "/register",
+        json={"node_id": NODE_ID, "signing_key_hex": KEY_HEX, "label": "legacy"},
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["new"] is True
+    assert body["pass_nft_id"] is None
+    assert body["pass_verified_at"] is None
+
+
+def test_register_with_pass_holder_wallet_binds_nft(client: TestClient, fake_indexer):
+    """Valid wallet holding a Pass: registration succeeds and the
+    bech32 nft_id is bound to the Tree."""
+    r = client.post(
+        "/register",
+        json={
+            "node_id":        NODE_ID,
+            "signing_key_hex": KEY_HEX,
+            "wallet_address": PASS_OWNER_ADDR,
+            "label":          "operator-1",
+        },
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["new"] is True
+    assert body["pass_nft_id"] == PASS_OWNER_NFT_BECH32
+    assert body["pass_verified_at"] is not None
+
+    # GET /nodes/<id> surfaces the binding.
+    r2 = client.get(f"/nodes/{NODE_ID}")
+    assert r2.status_code == 200
+    assert r2.json()["pass_nft_id"] == PASS_OWNER_NFT_BECH32
+
+
+def test_register_with_non_holder_wallet_returns_403(client: TestClient, fake_indexer):
+    """Wallet that doesn't hold a Pass: registration rejected with 403.
+    No partial node row left behind."""
+    r = client.post(
+        "/register",
+        json={
+            "node_id":        NODE_ID,
+            "signing_key_hex": KEY_HEX,
+            "wallet_address": NON_OWNER_ADDR,
+        },
+    )
+    assert r.status_code == 403
+    assert "does not hold an Orchard Pass" in r.json()["detail"]
+
+    # No node was created.
+    assert client.get(f"/nodes/{NODE_ID}").status_code == 404
+    assert client.get("/nodes").json() == []
+
+
+def test_register_with_malformed_wallet_returns_422(client: TestClient, fake_indexer):
+    """Pydantic validator rejects bad xch1 syntax before we ever
+    touch the indexer."""
+    r = client.post(
+        "/register",
+        json={
+            "node_id":        NODE_ID,
+            "signing_key_hex": KEY_HEX,
+            "wallet_address": "not-an-xch-address",
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_register_with_indexer_down_returns_503(client: TestClient, fake_indexer):
+    """Indexer error -> 503 Service Unavailable. We refuse to register
+    without proof when proof was requested; operator should retry."""
+    fake_indexer["fail_with"]("MintGarden 500: bad gateway")
+    r = client.post(
+        "/register",
+        json={
+            "node_id":        NODE_ID,
+            "signing_key_hex": KEY_HEX,
+            "wallet_address": PASS_OWNER_ADDR,
+        },
+    )
+    assert r.status_code == 503
+    assert "indexer error" in r.json()["detail"]
+    assert client.get(f"/nodes/{NODE_ID}").status_code == 404
+
+
+def test_reregister_changing_wallet_rebinds_pass(client: TestClient, fake_indexer):
+    """Operator initially registered without a wallet, later attaches
+    one. Re-register updates wallet_address and binds the Pass."""
+    # First register: no wallet.
+    client.post(
+        "/register",
+        json={"node_id": NODE_ID, "signing_key_hex": KEY_HEX},
+    )
+    # Re-register with the Pass-holding wallet.
+    r = client.post(
+        "/register",
+        json={
+            "node_id":        NODE_ID,
+            "signing_key_hex": KEY_HEX,
+            "wallet_address": PASS_OWNER_ADDR,
+        },
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["new"] is False
+    assert body["pass_nft_id"] == PASS_OWNER_NFT_BECH32
+
+
+def test_pass_verify_cache_hit(client: TestClient, fake_indexer, monkeypatch):
+    """The cache prevents a flapping operator from generating one
+    MintGarden call per retry within the TTL window."""
+    from oracle.app import pass_verify
+    pass_verify.clear_cache()
+
+    calls = {"n": 0}
+    original = pass_verify.nft_verify.list_passes_by_address
+
+    def counting(address: str):
+        calls["n"] += 1
+        return original(address)
+
+    monkeypatch.setattr(
+        "orchard_chia.nft.verify.list_passes_by_address", counting)
+
+    # Two registrations of two different nodes from the same wallet.
+    for nid in [NODE_ID, "FEDCBA9876543210FEDCBA9876543210"]:
+        r = client.post(
+            "/register",
+            json={
+                "node_id":        nid,
+                "signing_key_hex": KEY_HEX,
+                "wallet_address": PASS_OWNER_ADDR,
+            },
+        )
+        assert r.status_code == 201, r.text
+    # Cache hit on the second call.
+    assert calls["n"] == 1

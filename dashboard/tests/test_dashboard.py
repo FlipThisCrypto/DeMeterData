@@ -308,3 +308,65 @@ def test_private_mode_preserves_wallet_address_and_gps(client, monkeypatch):
     assert body["node"]["wallet_address"] == _DOXX_WALLET
     assert body["readings"][0]["gps_lat"] == _PRECISE_LAT
     assert body["readings"][0]["payload"]["sensors"]["gps"]["lat"] == _PRECISE_LAT
+
+
+# ---------------- Phase 6.5 verify_pass ----------------
+
+def test_verify_pass_holder_returns_nft_id(client, monkeypatch):
+    """Wallet that owns a Pass: endpoint returns has_pass=true plus
+    the bound nft_id and a MintGarden link the wizard can show the
+    operator."""
+    from orchard_chia.nft import verify as nft_verify
+    monkeypatch.setattr(nft_verify, "list_passes_by_address", lambda addr: [{
+        "nft_coin_id":    "nft1n00ugdl737xc6ht4yjdc3cer047lcz9actdxfzpxyat3tsu72z0q46g56z",
+        "launcher_id":    "9bdfe10dfe8fc6c6aebaa49370e3919f5fbf022f70b69912130dd71570f2854f",
+        "name":           "Orchard Pass #0001",
+        "edition_number": 1,
+        "owner_address":  addr,
+    }])
+    r = client.post("/api/oracle/verify_pass",
+                    json={"wallet_address": "xch1m3rvtj86wzzfjyk5mc7wzpr7h4zkaknm4wte7kg6afleu4f2tfxsr7nk3n"})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    body = r.get_json()
+    assert body["has_pass"] is True
+    assert body["pass_nft_id"].startswith("nft1")
+    assert body["edition_number"] == 1
+    assert "mintgarden.io/nfts/nft1" in body["mintgarden_url"]
+
+
+def test_verify_pass_non_holder_returns_has_pass_false(client, monkeypatch):
+    """Wallet that doesn't hold a Pass: has_pass=false plus a buy_url
+    the wizard can link the operator to."""
+    from orchard_chia.nft import verify as nft_verify
+    monkeypatch.setattr(nft_verify, "list_passes_by_address", lambda addr: [])
+    r = client.post("/api/oracle/verify_pass",
+                    json={"wallet_address": "xch1nobody00000000000000000000000000000000000000000000000000zz0t"})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["has_pass"] is False
+    assert body["pass_nft_id"] is None
+    assert "mintgarden.io/collections/col1a56lp9" in body["buy_url"]
+
+
+def test_verify_pass_missing_address_returns_400(client):
+    r = client.post("/api/oracle/verify_pass", json={})
+    assert r.status_code == 400
+
+
+def test_verify_pass_indexer_error_returns_502(client, monkeypatch):
+    from orchard_chia.nft import verify as nft_verify
+    def boom(addr):
+        raise nft_verify.IndexerError("MintGarden 500: bad gateway")
+    monkeypatch.setattr(nft_verify, "list_passes_by_address", boom)
+    r = client.post("/api/oracle/verify_pass",
+                    json={"wallet_address": "xch1m3rvtj86wzzfjyk5mc7wzpr7h4zkaknm4wte7kg6afleu4f2tfxsr7nk3n"})
+    assert r.status_code == 502
+    assert "indexer error" in r.get_json()["error"]
+
+
+def test_verify_pass_blocked_in_public_mode(public_client):
+    """Operator-only endpoint must 404 in public mode (no leaking
+    Pass-ownership queries through the public tunnel)."""
+    r = public_client.post("/api/oracle/verify_pass",
+                           json={"wallet_address": "xch1anything"})
+    assert r.status_code == 404

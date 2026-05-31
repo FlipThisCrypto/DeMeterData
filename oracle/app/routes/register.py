@@ -6,9 +6,17 @@ A new Tree gets its node_id and HMAC signing secret on first boot
 from the Tree over USB-serial and POSTs them here so the oracle knows
 how to verify future signed submissions.
 
-In v1 anyone can register a Tree — there is no NFT check. Phase 6 adds
-an Orchard Pass verification step (must hold the credential NFT on the
-declared wallet) before allowing registration.
+Phase 6.5: when the registration request includes a wallet_address,
+the oracle verifies on chain (via the MintGarden indexer) that the
+wallet holds at least one Orchard Pass. If not, registration is
+rejected with 403. The verified Pass NFT id gets bound to the Tree
+record so downstream consumers (Phase 7 payout, dashboard credentials
+display) can resolve which Pass authorized the Tree's existence.
+
+Backward compatibility: registration without ``wallet_address`` still
+succeeds and leaves ``pass_nft_id`` NULL. This keeps legacy nodes
+working and supports a future "soft launch" where operators register
+hardware first and bind a Pass later.
 """
 from __future__ import annotations
 
@@ -19,19 +27,31 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import models, pass_verify
 from ..db import get_db
 
 router = APIRouter()
 
 _HEX32 = re.compile(r"^[0-9A-Fa-f]{32}$")  # 16 bytes / node_id
 _HEX64 = re.compile(r"^[0-9A-Fa-f]{64}$")  # 32 bytes / signing key
+# bech32m XCH address: hrp "xch1" + base32 payload. Don't try to
+# fully validate bech32 here — that's the wallet's job. Just sanity-
+# check the prefix and a reasonable length so a typo doesn't get fed
+# to the indexer URL.
+_XCH_ADDR = re.compile(r"^xch1[0-9a-z]{50,80}$")
 
 
 class RegisterRequest(BaseModel):
     node_id: str = Field(..., description="32 hex chars (16 bytes)")
     signing_key_hex: str = Field(..., description="64 hex chars (32 bytes HMAC secret)")
-    wallet_address: str | None = Field(None, description="Optional Chia wallet address")
+    wallet_address: str | None = Field(
+        None,
+        description=(
+            "Optional Chia wallet address (xch1...). When provided, the "
+            "oracle verifies on chain that this wallet holds at least one "
+            "Orchard Pass and binds the first one to the Tree."
+        ),
+    )
     label: str | None = Field(None, description="Optional human-readable label")
     fw_version: str | None = None
 
@@ -49,15 +69,72 @@ class RegisterRequest(BaseModel):
             raise ValueError("signing_key_hex must be 64 hex characters")
         return v.upper()
 
+    @field_validator("wallet_address")
+    @classmethod
+    def _wallet_addr(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        # Tolerate whitespace from a copy/paste. Don't lower-case —
+        # the indexer expects the exact bech32m form.
+        s = v.strip()
+        if not _XCH_ADDR.match(s):
+            raise ValueError(
+                "wallet_address must be a Chia mainnet address starting with "
+                "'xch1' followed by 50-80 lowercase base32 chars"
+            )
+        return s
+
 
 class RegisterResponse(BaseModel):
     node_id: str
     registered_at: datetime
     new: bool
+    # When a wallet was provided AND a Pass was verified on chain, the
+    # bound NFT id (bech32 nft1...) and the verification timestamp.
+    # Both null in legacy unverified registrations.
+    pass_nft_id: str | None = None
+    pass_verified_at: datetime | None = None
+
+
+def _resolve_pass_nft_id(wallet_address: str | None) -> tuple[str | None, datetime | None]:
+    """Verify on chain that ``wallet_address`` holds a Pass and return
+    the first Pass's nft_id + the verification time. Returns
+    (None, None) when ``wallet_address`` is None.
+
+    Raises HTTPException(403) when the wallet holds no Pass.
+    Raises HTTPException(503) when the indexer call itself failed —
+    we'd rather make the operator retry than register without proof
+    when proof was requested.
+    """
+    if not wallet_address:
+        return None, None
+    try:
+        nft_id = pass_verify.first_pass_nft_id(wallet_address)
+    except pass_verify.PassVerifyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Could not verify Orchard Pass: indexer error: {e}",
+        ) from e
+    if nft_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "wallet does not hold an Orchard Pass — registration with "
+                "a wallet_address requires Pass ownership. Omit "
+                "wallet_address to register without a binding, or buy a "
+                "Pass at https://mintgarden.io/collections/"
+                "col1a56lp9zufakywlq4k5nntu3nd7k6jy2pe6ee23046ydlahmungqslvmj29"
+            ),
+        )
+    return nft_id, pass_verify.utcnow()
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 def register(req: RegisterRequest, db: Session = Depends(get_db)) -> RegisterResponse:
+    # Resolve Pass binding BEFORE touching the DB so a verification
+    # failure never leaves a half-registered row behind.
+    pass_nft_id, pass_verified_at = _resolve_pass_nft_id(req.wallet_address)
+
     existing = db.get(models.Node, req.node_id)
     if existing is not None:
         # Re-registration is allowed but only with the same signing key — a
@@ -71,13 +148,25 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)) -> RegisterRes
         # Update mutable metadata if provided.
         if req.wallet_address is not None:
             existing.wallet_address = req.wallet_address
+            # When wallet changes, re-bind the Pass (or clear if the
+            # operator deliberately moved to an unverified state by
+            # passing a wallet that we already verified is empty —
+            # which we'd have caught above before reaching here).
+            existing.pass_nft_id = pass_nft_id
+            existing.pass_verified_at = pass_verified_at
         if req.label is not None:
             existing.label = req.label
         if req.fw_version is not None:
             existing.fw_version = req.fw_version
         db.commit()
         db.refresh(existing)
-        return RegisterResponse(node_id=existing.node_id, registered_at=existing.registered_at, new=False)
+        return RegisterResponse(
+            node_id=existing.node_id,
+            registered_at=existing.registered_at,
+            new=False,
+            pass_nft_id=existing.pass_nft_id,
+            pass_verified_at=existing.pass_verified_at,
+        )
 
     node = models.Node(
         node_id=req.node_id,
@@ -85,9 +174,17 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)) -> RegisterRes
         wallet_address=req.wallet_address,
         label=req.label,
         fw_version=req.fw_version,
+        pass_nft_id=pass_nft_id,
+        pass_verified_at=pass_verified_at,
         registered_at=datetime.now(timezone.utc),
     )
     db.add(node)
     db.commit()
     db.refresh(node)
-    return RegisterResponse(node_id=node.node_id, registered_at=node.registered_at, new=True)
+    return RegisterResponse(
+        node_id=node.node_id,
+        registered_at=node.registered_at,
+        new=True,
+        pass_nft_id=node.pass_nft_id,
+        pass_verified_at=node.pass_verified_at,
+    )
