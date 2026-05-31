@@ -18,18 +18,13 @@
   </div>
 </section>
 
-<section class="grid">
+<!-- One tile per sensor reported by the Tree. Populated by app.js
+     from whatever sensor names appear in payload.sensors — known
+     ones (mq135, bme280, gps, ds18b20…) get nice labels + formatted
+     fields; unknown sensors get a generic auto-tile. -->
+<section class="grid" id="sensor-grid">
   <div class="card">
-    <h3>MQ-135 — air quality</h3>
-    <div id="mq135-data"><span class="muted">no readings yet</span></div>
-  </div>
-  <div class="card">
-    <h3>BME280 — temp / humidity / pressure</h3>
-    <div id="bme280-data"><span class="muted">no readings yet</span></div>
-  </div>
-  <div class="card">
-    <h3>GPS</h3>
-    <div id="gps-data"><span class="muted">no readings yet</span></div>
+    <span class="muted">Waiting for first reading…</span>
   </div>
 </section>
 

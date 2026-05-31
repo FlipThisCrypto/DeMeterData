@@ -179,6 +179,113 @@ const OrchardView = (() => {
 
   // -------------------------- tree (live) page -----------------------
 
+  // Per-sensor render config. Adding a new known sensor = add a key
+  // here with its display title and field list; the dashboard tile
+  // appears automatically the next time a Tree reports that sensor.
+  // Unknown sensor names fall through to a generic auto-tile that
+  // renders every field as-is.
+  //
+  // Field formats are functions so we can compose units (`${v} °C`)
+  // and precision (`.toFixed(2)`). null/undefined values render as
+  // an em-dash via makeField's null check.
+  const SENSOR_TILES = {
+    mq135: {
+      title: "MQ-135 — air quality",
+      fields: [
+        ["adc_raw",      v => v?.toFixed?.(1) ?? v],
+        ["voltage_v",    v => v?.toFixed?.(3) ?? v],
+        ["baseline",     v => v?.toFixed?.(1) ?? v,   "adc_baseline"],
+        ["deviation",    v => v?.toFixed?.(2) ?? v,   "adc_dev"],
+      ],
+    },
+    bme280: {
+      title: "BME280 — temp / humidity / pressure",
+      fields: [
+        ["temperature",  v => `${v?.toFixed?.(1) ?? "—"} °C`,   "temperature_c"],
+        ["humidity",     v => `${v?.toFixed?.(1) ?? "—"} %`,    "humidity_pct"],
+        ["pressure",     v => `${v?.toFixed?.(2) ?? "—"} hPa`,  "pressure_hpa"],
+        ["i2c address",  v => v ? `0x${v.toString(16)}` : "—",  "i2c_addr"],
+      ],
+    },
+    ds18b20: {
+      title: "DS18B20 — 1-Wire temperature probe",
+      fields: [
+        ["temperature",   v => `${v?.toFixed?.(2) ?? "—"} °C`,   "temperature_c"],
+        ["probes on bus", v => v,                                 "device_count"],
+        ["rom id",        v => v,                                 "rom_id"],
+      ],
+    },
+    gps: {
+      title: "GPS",
+      // GPS is special: when fix=false we want to show different fields.
+      // Use a custom render to handle that branch cleanly.
+      render: (gps) => {
+        let html =
+          makeField("fix",        gps.fix ? "yes" : "no") +
+          makeField("satellites", gps.satellites ?? "—");
+        if (gps.fix) {
+          html +=
+            makeField("lat",   gps.lat?.toFixed?.(6) ?? gps.lat) +
+            makeField("lon",   gps.lon?.toFixed?.(6) ?? gps.lon) +
+            makeField("alt_m", gps.alt_m?.toFixed?.(1) ?? gps.alt_m) +
+            makeField("utc",   gps.utc || "—");
+        } else {
+          html += makeField("age (ms)", gps.fix_age_ms ?? "—");
+        }
+        return html;
+      },
+    },
+  };
+
+  function renderSensorCard(sensorName, data) {
+    const cfg = SENSOR_TILES[sensorName];
+    const title = cfg?.title ?? sensorName;
+    let body;
+    if (cfg?.render) {
+      body = cfg.render(data);
+    } else if (cfg?.fields) {
+      body = cfg.fields.map(([label, fmt, key]) => {
+        // Triplet form: [display label, formatter, payload key].
+        // Doublet form: [display label, formatter] uses label as key.
+        const payloadKey = key ?? label;
+        const raw = data[payloadKey];
+        const formatted = (raw === null || raw === undefined)
+          ? undefined
+          : (fmt ? fmt(raw) : raw);
+        return makeField(label, formatted);
+      }).join("");
+    } else {
+      // Unknown sensor — auto-tile from every key in the payload.
+      // This is the "future-proof" path: a new sensor on the Tree
+      // shows up on the dashboard with no code change.
+      body = Object.entries(data).map(([k, v]) => makeField(k, v)).join("");
+    }
+    // makeField escapes every dynamic value, so a malicious Tree can't
+    // inject HTML/JS via a sensor field.
+    return `<div class="card"><h3>${esc(title)}</h3>${body}</div>`;
+  }
+
+  function renderSensors(sensors) {
+    const grid = $("#sensor-grid");
+    if (!grid) return;
+    // Stable display order: render known sensors in SENSOR_TILES order
+    // first, then anything else alphabetically. Keeps the tile layout
+    // from jumping around between polls when sensor key order changes.
+    const known   = Object.keys(SENSOR_TILES).filter(k => k in sensors);
+    const unknown = Object.keys(sensors)
+                      .filter(k => !(k in SENSOR_TILES))
+                      .sort();
+    const order   = [...known, ...unknown];
+    if (order.length === 0) {
+      grid.innerHTML =
+        `<div class="card"><span class="muted">Waiting for first reading…</span></div>`;
+      return;
+    }
+    grid.innerHTML = order
+      .map(name => renderSensorCard(name, sensors[name]))
+      .join("");
+  }
+
   function renderTree(data) {
     const aliveDot = $('#alive-light');
     const aliveLbl = $('#alive-label');
@@ -196,39 +303,8 @@ const OrchardView = (() => {
     }
 
     const latest = data.latest;
-    const mq = latest?.payload?.sensors?.mq135;
-    const bme = latest?.payload?.sensors?.bme280;
-    const gps = latest?.payload?.sensors?.gps;
-
-    // makeField below escapes every dynamic value — a malicious Tree
-    // firmware cannot inject HTML/JS into the operator's view by
-    // putting markup into a sensor field.
-
-    if (mq) {
-      $('#mq135-data').innerHTML =
-        makeField('adc_raw',   mq.adc_raw?.toFixed?.(1)      ?? mq.adc_raw) +
-        makeField('voltage_v', mq.voltage_v?.toFixed?.(3)    ?? mq.voltage_v) +
-        makeField('baseline',  mq.adc_baseline?.toFixed?.(1) ?? mq.adc_baseline) +
-        makeField('deviation', mq.adc_dev?.toFixed?.(2)      ?? mq.adc_dev);
-    }
-    if (bme) {
-      $('#bme280-data').innerHTML =
-        makeField('temperature', `${bme.temperature_c?.toFixed?.(1) ?? '—'} °C`) +
-        makeField('humidity',    `${bme.humidity_pct?.toFixed?.(1) ?? '—'} %`) +
-        makeField('pressure',    `${bme.pressure_hpa?.toFixed?.(2) ?? '—'} hPa`) +
-        makeField('i2c address', bme.i2c_addr ? `0x${bme.i2c_addr.toString(16)}` : '—');
-    }
-    if (gps) {
-      $('#gps-data').innerHTML =
-        makeField('fix',        gps.fix ? 'yes' : 'no') +
-        makeField('satellites', gps.satellites ?? '—') +
-        (gps.fix ? (
-          makeField('lat',   gps.lat?.toFixed?.(6) ?? gps.lat) +
-          makeField('lon',   gps.lon?.toFixed?.(6) ?? gps.lon) +
-          makeField('alt_m', gps.alt_m?.toFixed?.(1) ?? gps.alt_m) +
-          makeField('utc',   gps.utc || '—')
-        ) : makeField('age (ms)', gps.fix_age_ms ?? '—'));
-    }
+    const sensors = latest?.payload?.sensors ?? {};
+    renderSensors(sensors);
 
     const tbody = $('#readings-body');
     if (data.readings?.length) {
