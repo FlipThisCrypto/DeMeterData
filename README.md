@@ -133,11 +133,23 @@ User-facing copy uses brand names. Code uses technical equivalents. This table i
 git clone https://github.com/FlipThisCrypto/the-orchard.git
 cd the-orchard
 
-# 2. Install dashboard + oracle (Python 3.11+)
+# 2. Install dashboard + oracle (Python 3.11+).
+#    Hash-pinned lockfiles (*.lock, committed) are the production-safe
+#    install. Plain requirements.txt is fine for dev but exposes you
+#    to supply-chain risk if a maintainer of any dep ships a malicious
+#    point release.
 python -m venv .venv
 .venv\Scripts\activate            # Windows
 # source .venv/bin/activate       # macOS / Linux
-pip install -r oracle/requirements.txt -r dashboard/requirements.txt
+pip install --require-hashes -r oracle/requirements.lock \
+            --require-hashes -r dashboard/requirements.lock \
+            --require-hashes -r orchard_chia/requirements.lock
+
+# To regenerate the lockfiles after a deliberate dep bump:
+#   pip install pip-tools
+#   pip-compile --generate-hashes -o oracle/requirements.lock     oracle/requirements.txt
+#   pip-compile --generate-hashes -o dashboard/requirements.lock  dashboard/requirements.txt
+#   pip-compile --generate-hashes -o orchard_chia/requirements.lock orchard_chia/requirements.txt
 
 # 3. Start the local oracle
 python -m oracle.app.main         # default: http://localhost:8000

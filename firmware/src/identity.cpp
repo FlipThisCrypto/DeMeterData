@@ -12,11 +12,19 @@ namespace orchard::identity {
 namespace {
 
 constexpr size_t kNodeIdBytes = 16;
-constexpr const char* kNvsKeyNodeId = "node_id";
-constexpr const char* kNvsKeySecret = "sign_key";
+constexpr const char* kNvsKeyNodeId  = "node_id";
+constexpr const char* kNvsKeySecret  = "sign_key";
+constexpr const char* kNvsKeyAPPw    = "ap_pw";
+
+// Printable alphabet for AP passwords. Skips characters that are
+// hard to read or hard to type on a phone:  0 O o 1 l I.
+constexpr const char* kAPPwAlphabet =
+    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+constexpr size_t kAPPwAlphabetLen = 56;
 
 uint8_t signing_secret_[kSigningSecretLen] = {0};
 String node_id_hex_;
+String ap_password_;
 
 void random_bytes(uint8_t* out, size_t len) {
   // esp_random() is hardware-backed when WiFi/BT is active. Before that,
@@ -27,6 +35,20 @@ void random_bytes(uint8_t* out, size_t len) {
     const size_t chunk = (len - i >= 4) ? 4 : (len - i);
     memcpy(out + i, &r, chunk);
   }
+}
+
+String generate_ap_password(size_t len) {
+  // Random per-device printable secret. Each character is drawn from
+  // kAPPwAlphabet using esp_random() % alphabet_len. The modulo bias
+  // is irrelevant for an alphabet size of 56 — the bias toward the
+  // first few characters is < 0.5% per char.
+  String s;
+  s.reserve(len);
+  for (size_t i = 0; i < len; ++i) {
+    const uint32_t r = esp_random() ^ static_cast<uint32_t>(micros());
+    s += kAPPwAlphabet[r % kAPPwAlphabetLen];
+  }
+  return s;
 }
 
 }  // namespace
@@ -75,6 +97,39 @@ const String& node_id_hex() {
 
 const uint8_t* signing_secret() {
   return signing_secret_;
+}
+
+const String& ap_password() {
+  // Lazy: only touch NVS on first call. Most boots will never need
+  // the AP password (WiFi credentials are persisted), so we don't
+  // amortize NVS reads in begin().
+  if (ap_password_.length() > 0) {
+    return ap_password_;
+  }
+
+  Preferences prefs;
+  prefs.begin(ORCHARD_NVS_NAMESPACE, /*readOnly=*/false);
+
+  String stored = prefs.getString(kNvsKeyAPPw, "");
+  if (stored.length() >= 8) {
+    ap_password_ = stored;
+    prefs.end();
+    // Intentionally NOT printed to serial — see header comment. The
+    // operator already noted it on first boot; recovering a lost
+    // password is an NVS-wipe operation.
+    return ap_password_;
+  }
+
+  // First call ever — generate and persist.
+  ap_password_ = generate_ap_password(ORCHARD_AP_PASSWORD_LEN);
+  prefs.putString(kNvsKeyAPPw, ap_password_);
+  prefs.end();
+
+  Serial.println("[identity] generated soft-AP password (record this; "
+                 "it will NOT be re-printed):");
+  Serial.printf("[identity]   ap_password=%s\n", ap_password_.c_str());
+
+  return ap_password_;
 }
 
 void hmac_sha256(const uint8_t* data, size_t len, uint8_t out[32]) {

@@ -9,6 +9,7 @@ local node + DataLayer paths.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -103,16 +104,52 @@ def load() -> Config:
     )
 
 
+def _restrict_signing_key_perms() -> None:
+    """Force the signing-key file to 0600 (owner read/write only).
+
+    Phase 5 attestations are signed with this key. If it leaks, an
+    attacker can forge attestations the payout script accepts. Default
+    umask leaves it group/other-readable on many Unix systems; tighten
+    on every load so the chmod survives operator edits and file
+    re-creations.
+
+    On Windows ``os.chmod`` only flips the read-only bit (NTFS ACLs
+    aren't POSIX modes). Real protection there comes from the parent
+    directory's ACL, which is why we put the key under the project
+    tree owned by the operator's user account.
+    """
+    try:
+        os.chmod(SIGNING_KEY_PATH, 0o600)
+    except OSError as e:
+        print(f"[orchard.datalayer] WARN: could not chmod "
+              f"{SIGNING_KEY_PATH} to 0600: {e}", file=sys.stderr)
+
+
 def _load_or_make_signing_key() -> str:
     """Per-oracle signing key. Generated on first run, persisted locally,
-    never transmitted. 32 bytes / 64 hex chars. Gitignored under chia/data/."""
+    never transmitted. 32 bytes / 64 hex chars. Gitignored under
+    orchard_chia/data/.
+
+    The file is forced to mode 0600 (owner-only) on every load — see
+    ``_restrict_signing_key_perms`` for the Windows caveat.
+    """
     SIGNING_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
     if SIGNING_KEY_PATH.exists():
         text = SIGNING_KEY_PATH.read_text(encoding="utf-8").strip()
         if len(text) == 64 and all(c in "0123456789abcdefABCDEF" for c in text):
+            _restrict_signing_key_perms()
             return text.upper()
-    # Generate fresh.
+    # Generate fresh. Write via os.open with O_CREAT|O_WRONLY and an
+    # explicit 0o600 mode so the file is born owner-only on POSIX —
+    # closes the small race where a previous default-umask write could
+    # leak the bytes to a concurrent reader before chmod lands.
     import secrets
     new_hex = secrets.token_hex(32).upper()
-    SIGNING_KEY_PATH.write_text(new_hex + "\n", encoding="utf-8")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    fd = os.open(str(SIGNING_KEY_PATH), flags, 0o600)
+    try:
+        os.write(fd, (new_hex + "\n").encode("utf-8"))
+    finally:
+        os.close(fd)
+    _restrict_signing_key_perms()  # belt-and-braces on Windows
     return new_hex

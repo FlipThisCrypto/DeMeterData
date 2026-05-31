@@ -32,6 +32,19 @@ constexpr size_t kSigningSecretLen = 32;
 // `out` must be 32 bytes.
 void hmac_sha256(const uint8_t* data, size_t len, uint8_t out[32]);
 
+// Soft-AP password for the WiFi provisioning fallback.
+//
+// Generated on first call (random ORCHARD_AP_PASSWORD_LEN chars from a
+// printable alphabet), persisted in NVS, and stable across reboots.
+// The first generation prints the password ONCE to the serial console
+// so the operator can record it. Returned as a String for direct use
+// with WiFi.softAP(ssid, password).
+//
+// Subsequent calls do NOT re-print the password — recovering a lost
+// AP password is an explicit operator action (NVS wipe + reboot) so
+// you don't accidentally leak it by tailing the boot log.
+const String& ap_password();
+
 // Hex-encode a buffer into a String (uppercase, no separators).
 String to_hex(const uint8_t* buf, size_t len);
 

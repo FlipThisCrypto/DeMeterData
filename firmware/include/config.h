@@ -38,8 +38,18 @@
 #ifndef ORCHARD_AP_SSID_PREFIX
 #define ORCHARD_AP_SSID_PREFIX  "OrchardTree-"
 #endif
-#ifndef ORCHARD_AP_PASSWORD
-#define ORCHARD_AP_PASSWORD  "orchardsetup"  // change at first boot
+
+// Length of the per-device random soft-AP password.
+//
+// We do NOT define a default password here. A shared default across
+// every Tree in the fleet would be a same-password-everywhere attack
+// (anyone who reads this header can join any Tree's AP). Instead the
+// password is generated per-device on first boot by
+// orchard::identity::ap_password(), persisted in NVS, and printed to
+// the serial console the one time it's generated so the operator can
+// note it.
+#ifndef ORCHARD_AP_PASSWORD_LEN
+#define ORCHARD_AP_PASSWORD_LEN  12
 #endif
 
 // NVS namespace key.
