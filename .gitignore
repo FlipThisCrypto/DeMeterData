@@ -110,5 +110,14 @@ dashboard/.env
 nft/mint_plan.yaml
 nft/mint_results.json
 
+# Source NFT media — the .mp4 originals live on IPFS via Filebase
+# (defiant-black-skink.myfilebase.com); the repo only ships the
+# generated metadata JSONs that point at the IPFS CIDs.
+nft/metadata/*.mp4
+
+# mintgarden-studio export folder (operator-side bookkeeping; the
+# canonical record is the on-chain NFTs themselves).
+nft/metadata/mintgarden-results/
+
 # --- Claude / dev tooling local state ---
 .claude/
