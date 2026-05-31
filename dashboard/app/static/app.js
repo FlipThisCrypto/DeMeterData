@@ -218,6 +218,105 @@ const OrchardView = (() => {
     return `${v.toFixed(decimals)} °${u.toUpperCase()}`;
   }
 
+  // ---- GPS coordinate formatting + interpretation -------------------
+
+  // Directional decimal: "38.004648°N", "85.737465°W"
+  function formatLat(lat) {
+    if (lat === null || lat === undefined) return '—';
+    const n = Number(lat);
+    if (!Number.isFinite(n)) return '—';
+    return `${Math.abs(n).toFixed(6)}°${n >= 0 ? 'N' : 'S'}`;
+  }
+  function formatLon(lon) {
+    if (lon === null || lon === undefined) return '—';
+    const n = Number(lon);
+    if (!Number.isFinite(n)) return '—';
+    return `${Math.abs(n).toFixed(6)}°${n >= 0 ? 'E' : 'W'}`;
+  }
+
+  // Reverse-geocode lat/lon to a "City, Region, Country" label using
+  // Nominatim (OSM's free reverse-geocoder). We cache per
+  // ~0.001° = ~111m cell in localStorage for 1 hour so a stationary
+  // Tree isn't hitting Nominatim every 5 seconds.
+  //
+  // Nominatim policy: 1 req/s max, identify your app. Browsers send
+  // their own User-Agent (we can't override), but the rate is enforced
+  // via the cell cache. If the request fails (rate-limited, offline,
+  // CORS), we silently fall back to "—" — coordinates are still
+  // visible regardless.
+  const GEOCODE_KEY_PREFIX = 'orchard.geo.';
+  const GEOCODE_TTL_MS = 60 * 60 * 1000;     // 1 hour
+
+  function geocodeCellKey(lat, lon) {
+    const la = Number(lat).toFixed(3);   // 3 decimals = ~111m
+    const lo = Number(lon).toFixed(3);
+    return `${GEOCODE_KEY_PREFIX}${la},${lo}`;
+  }
+
+  async function reverseGeocode(lat, lon) {
+    if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) {
+      return null;
+    }
+    const key = geocodeCellKey(lat, lon);
+    try {
+      const cached = JSON.parse(localStorage.getItem(key) || 'null');
+      if (cached && Date.now() - cached.when < GEOCODE_TTL_MS) {
+        return cached.name;
+      }
+    } catch { /* storage unavailable; fall through to fetch */ }
+
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse` +
+                  `?format=jsonv2&zoom=10` +
+                  `&lat=${encodeURIComponent(lat)}` +
+                  `&lon=${encodeURIComponent(lon)}`;
+      const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) return null;
+      const j = await r.json();
+      const a = j.address || {};
+      const parts = [
+        a.city || a.town || a.village || a.hamlet || a.suburb,
+        a.state,
+        a.country,
+      ].filter(Boolean);
+      const name = parts.length ? parts.join(', ') : (j.display_name || null);
+      try {
+        localStorage.setItem(key, JSON.stringify({ name, when: Date.now() }));
+      } catch { /* storage full or blocked; that's fine */ }
+      return name;
+    } catch {
+      return null;
+    }
+  }
+
+  // Async kick: when the GPS tile renders, we trigger a geocode lookup
+  // and patch the city label in place once the result arrives. The
+  // tile re-render that happens on the next poll picks up the cached
+  // value directly without async, so this only runs the first time
+  // (or after the 1h TTL expires).
+  function patchGeocodeLabel(lat, lon) {
+    const slot = document.querySelector('[data-gps-locality]');
+    if (!slot) return;
+    reverseGeocode(lat, lon).then(name => {
+      const fresh = document.querySelector('[data-gps-locality]');
+      if (!fresh) return;
+      fresh.textContent = name || '—';
+    });
+  }
+
+  // Synchronous cached lookup — used when rendering the tile so we
+  // can show the city immediately on subsequent polls.
+  function cachedLocality(lat, lon) {
+    try {
+      const cached = JSON.parse(
+        localStorage.getItem(geocodeCellKey(lat, lon)) || 'null');
+      if (cached && Date.now() - cached.when < GEOCODE_TTL_MS) {
+        return cached.name;
+      }
+    } catch {}
+    return null;
+  }
+
   // Per-sensor render config. Adding a new known sensor = add a key
   // here with its display title and field list; the dashboard tile
   // appears automatically the next time a Tree reports that sensor.
@@ -263,11 +362,31 @@ const OrchardView = (() => {
           makeField("fix",        gps.fix ? "yes" : "no") +
           makeField("satellites", gps.satellites ?? "—");
         if (gps.fix) {
+          const lat = Number(gps.lat);
+          const lon = Number(gps.lon);
           html +=
-            makeField("lat",   gps.lat?.toFixed?.(6) ?? gps.lat) +
-            makeField("lon",   gps.lon?.toFixed?.(6) ?? gps.lon) +
+            makeField("lat",   formatLat(gps.lat), {mono: true}) +
+            makeField("lon",   formatLon(gps.lon), {mono: true}) +
             makeField("alt_m", gps.alt_m?.toFixed?.(1) ?? gps.alt_m) +
             makeField("utc",   gps.utc || "—");
+          // Map link + reverse-geocoded locality. URL is built from
+          // numeric values only — no string injection path.
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            const url =
+              `https://www.openstreetmap.org/?` +
+              `mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`;
+            const locality = cachedLocality(lat, lon);
+            html +=
+              `<div class="field">` +
+                `<div class="k">locality</div>` +
+                `<div class="v" data-gps-locality>${esc(locality || '…')}</div>` +
+              `</div>` +
+              `<div class="field">` +
+                `<div class="k">map</div>` +
+                `<div class="v"><a href="${esc(url)}" target="_blank" rel="noopener">` +
+                `View on OpenStreetMap →</a></div>` +
+              `</div>`;
+          }
         } else {
           // No fix → surface the auto-baud diagnostic so an operator
           // can tell module-silent (baud=0) apart from has-bytes-but-
@@ -353,6 +472,19 @@ const OrchardView = (() => {
     const latest = data.latest;
     const sensors = latest?.payload?.sensors ?? {};
     renderSensors(sensors);
+
+    // After the tiles render, kick a reverse-geocode for the GPS fix
+    // if there is one. The result patches the locality field in place
+    // and gets cached in localStorage for an hour, so the next render
+    // of this tile shows the city without an async wait.
+    const gps = sensors.gps;
+    if (gps?.fix) {
+      const lat = Number(gps.lat);
+      const lon = Number(gps.lon);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        patchGeocodeLabel(lat, lon);
+      }
+    }
 
     const tbody = $('#readings-body');
     if (data.readings?.length) {
