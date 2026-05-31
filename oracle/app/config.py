@@ -12,6 +12,15 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# pydantic-settings resolves a relative `env_file` against the process
+# current working directory. Operators run `python -m oracle.app.main`
+# from the repo root, so a plain "env_file=.env" would look for the
+# file at the repo root and silently miss oracle/.env where every
+# README + example tells the operator to put it. Pin the path
+# explicitly relative to THIS file so it works regardless of cwd.
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+
+
 class Settings(BaseSettings):
     """Runtime configuration. Override via env vars or oracle/.env."""
 
@@ -33,7 +42,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="ORCHARD_ORACLE_",
-        env_file=".env",
+        env_file=str(_ENV_PATH),
         env_file_encoding="utf-8",
         extra="ignore",
     )

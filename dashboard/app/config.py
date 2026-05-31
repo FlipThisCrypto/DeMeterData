@@ -6,7 +6,16 @@ nothing clashes with the oracle or firmware configs.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Pin `env_file` to dashboard/.env regardless of cwd. pydantic-settings
+# resolves a bare "env_file=.env" against the process working directory,
+# so running `python -m dashboard.app` from the repo root would miss
+# dashboard/.env entirely. Anchor it to this file's location.
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -37,7 +46,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="ORCHARD_VIEW_",
-        env_file=".env",
+        env_file=str(_ENV_PATH),
         env_file_encoding="utf-8",
         extra="ignore",
     )
