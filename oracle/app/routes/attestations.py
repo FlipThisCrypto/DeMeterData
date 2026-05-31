@@ -1,0 +1,192 @@
+# SPDX-License-Identifier: Apache-2.0
+"""On-chain attestation records.
+
+The Phase 5 writer (``orchard_chia.datalayer.main``) signs each Tree's
+per-Season uptime, writes it to a Chia DataLayer store, and POSTs the
+resulting tx_id + key here so the oracle's local DB tracks what's on
+chain. The dashboard reads from this table to render the "On chain"
+card on each Tree's live view — no DataLayer round-trip per render.
+
+Endpoints:
+  POST /attestations              — writer reports a batch_update result
+  GET  /attestations/{node_id}    — list a Tree's attestations newest first
+  GET  /attestations/{node_id}/latest — convenience for the dashboard
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from .. import models
+from ..db import get_db
+
+router = APIRouter()
+
+
+class AttestationRecord(BaseModel):
+    node_id: str = Field(..., description="32 hex chars")
+    season_number: int = Field(..., ge=1)
+    hours_online: int = Field(..., ge=0, le=24)
+    data_hash: str = Field(..., description="sha256 hex of the canonical bytes that were signed")
+    oracle_sig: str = Field(..., description="HMAC-SHA256 hex of the signed body")
+    dl_tx_id: str = Field(..., description="Chia DataLayer batch tx id (0x... or hex)")
+    dl_key_hex: str = Field(..., description="hex of the `attest:<node>:<season>` key")
+    block_height_at_write: int | None = None
+    written_to_datalayer_at: datetime | None = None
+
+
+class AttestationPublic(BaseModel):
+    node_id: str
+    season_number: int
+    hours_online: int
+    data_hash: str
+    oracle_sig: str | None
+    dl_tx_id: str | None
+    dl_key_hex: str | None
+    block_height_at_write: int | None
+    written_to_datalayer_at: datetime | None
+    created_at: datetime
+
+
+def _to_public(a: models.Attestation) -> AttestationPublic:
+    return AttestationPublic(
+        node_id=a.node_id,
+        season_number=a.season_number,
+        hours_online=a.hours_online,
+        data_hash=a.data_hash,
+        oracle_sig=a.oracle_sig,
+        dl_tx_id=a.dl_tx_id,
+        dl_key_hex=a.dl_key_hex,
+        block_height_at_write=a.block_height_at_write,
+        written_to_datalayer_at=a.written_to_datalayer_at,
+        created_at=a.created_at,
+    )
+
+
+@router.post(
+    "/attestations",
+    response_model=AttestationPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_attestation(
+    rec: AttestationRecord,
+    db: Session = Depends(get_db),
+) -> AttestationPublic:
+    """Writer reports a successful DataLayer batch_update.
+
+    Idempotent on (node_id, season_number): re-running the writer
+    against an already-recorded attestation updates the tx_id +
+    timestamps instead of erroring. The writer's natural retry path
+    therefore Just Works without poisoning the table with duplicates.
+
+    No auth in v1 — the writer runs from the same machine as the
+    oracle (localhost binding by default after the security pass).
+    Phase 11 will harden this for the public-network case.
+    """
+    # Normalize node_id casing — matches the convention used elsewhere
+    # in the oracle so a lower-case writer call doesn't fragment rows.
+    node_id = rec.node_id.upper()
+
+    # Reject attestations for nodes we don't know about. The writer
+    # only ever sees nodes via the oracle's /nodes endpoint anyway,
+    # so this should never fire in practice — but it stops a bad
+    # write from creating an orphan row.
+    if db.get(models.Node, node_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"unknown node_id: {node_id}",
+        )
+
+    written_at = rec.written_to_datalayer_at or datetime.now(timezone.utc)
+
+    existing = db.execute(
+        select(models.Attestation).where(
+            models.Attestation.node_id == node_id,
+            models.Attestation.season_number == rec.season_number,
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        # Re-write — update the chain pointers but preserve created_at.
+        existing.hours_online = rec.hours_online
+        existing.data_hash = rec.data_hash
+        existing.oracle_sig = rec.oracle_sig
+        existing.dl_tx_id = rec.dl_tx_id
+        existing.dl_key_hex = rec.dl_key_hex
+        existing.block_height_at_write = rec.block_height_at_write
+        existing.written_to_datalayer_at = written_at
+        db.commit()
+        db.refresh(existing)
+        return _to_public(existing)
+
+    a = models.Attestation(
+        node_id=node_id,
+        season_number=rec.season_number,
+        hours_online=rec.hours_online,
+        data_hash=rec.data_hash,
+        oracle_sig=rec.oracle_sig,
+        dl_tx_id=rec.dl_tx_id,
+        dl_key_hex=rec.dl_key_hex,
+        block_height_at_write=rec.block_height_at_write,
+        written_to_datalayer_at=written_at,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(a)
+    db.commit()
+    db.refresh(a)
+    return _to_public(a)
+
+
+@router.get(
+    "/attestations/{node_id}",
+    response_model=list[AttestationPublic],
+)
+def list_attestations(
+    node_id: str,
+    limit: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> list[AttestationPublic]:
+    """Newest first, capped at ``limit``."""
+    node_id = node_id.upper()
+    if db.get(models.Node, node_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="unknown node_id",
+        )
+    rows = db.execute(
+        select(models.Attestation)
+        .where(models.Attestation.node_id == node_id)
+        .order_by(models.Attestation.season_number.desc())
+        .limit(limit)
+    ).scalars().all()
+    return [_to_public(r) for r in rows]
+
+
+@router.get(
+    "/attestations/{node_id}/latest",
+    response_model=AttestationPublic | None,
+)
+def latest_attestation(
+    node_id: str,
+    db: Session = Depends(get_db),
+) -> AttestationPublic | None:
+    """Just the most recent attestation, or null when there is none.
+    Used by the dashboard's "On chain" card so it doesn't have to pull
+    the full list every poll."""
+    node_id = node_id.upper()
+    if db.get(models.Node, node_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="unknown node_id",
+        )
+    row = db.execute(
+        select(models.Attestation)
+        .where(models.Attestation.node_id == node_id)
+        .order_by(models.Attestation.season_number.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return _to_public(row) if row is not None else None

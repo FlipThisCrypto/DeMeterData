@@ -30,6 +30,15 @@
   <div id="operator-credentials-body"></div>
 </section>
 
+<!-- Phase 5.5: latest on-chain attestation. Hidden until the Tree
+     has at least one Season attested. When visible: shows the Season,
+     hours, the Chia DataLayer tx id linking to spacescan, and a
+     copy-paste verification command. -->
+<section class="card" id="onchain-card" hidden>
+  <h3>On chain</h3>
+  <div id="onchain-body"></div>
+</section>
+
 <!-- One tile per sensor reported by the Tree. Populated by app.js
      from whatever sensor names appear in payload.sensors — known
      ones (mq135, bme280, gps, ds18b20…) get nice labels + formatted
@@ -57,6 +66,10 @@
 {% block scripts %}
 <script>
   window.NODE_ID = "{{ node.node_id }}";
+  // The DataLayer store id is operator-configurable; render it so
+  // the dashboard's "On chain" card can show a copy-pasteable
+  // `chia data get_value` command the viewer can run themselves.
+  window.ORCHARD_STORE_ID = "{{ datalayer_store_id or '' }}";
 </script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 <script>OrchardView.initTreePage();</script>

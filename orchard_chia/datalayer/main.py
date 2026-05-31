@@ -16,11 +16,63 @@ from __future__ import annotations
 
 import sys
 from collections import Counter
+from dataclasses import dataclass
 from datetime import datetime, timezone
+
+import requests
 
 from . import attest, config
 from .oracle import OracleClient, OracleError
 from .rpc import ChiaRpcError, DataLayerRpc, FullNodeRpc
+
+
+@dataclass
+class _PendingAttestation:
+    """A signed attestation that's queued for DataLayer in this run.
+    After batch_update succeeds we POST one of these per row to the
+    oracle's /attestations endpoint so the local DB tracks what's on
+    chain (the dashboard reads this for the "On chain" card)."""
+    node_id: str
+    season: int
+    hours_online: int
+    data_hash: str
+    oracle_sig: str
+    key_hex: str
+    block_height: int
+
+
+def _report_to_oracle(
+    *,
+    oracle_url: str,
+    pending: list[_PendingAttestation],
+    tx_id: str,
+    written_at: datetime,
+) -> None:
+    """POST one /attestations record per pending row. Failures are
+    logged but don't abort — the DataLayer write already succeeded;
+    re-running the writer will catch up the oracle's view."""
+    base = oracle_url.rstrip("/")
+    for p in pending:
+        body = {
+            "node_id":               p.node_id,
+            "season_number":         p.season,
+            "hours_online":          p.hours_online,
+            "data_hash":             p.data_hash,
+            "oracle_sig":            p.oracle_sig,
+            "dl_tx_id":              tx_id,
+            "dl_key_hex":            p.key_hex,
+            "block_height_at_write": p.block_height,
+            "written_to_datalayer_at": written_at.isoformat(),
+        }
+        try:
+            r = requests.post(f"{base}/attestations", json=body, timeout=10)
+        except requests.RequestException as e:
+            print(f"  WARN: oracle /attestations POST failed: {e}", file=sys.stderr)
+            continue
+        if r.status_code not in (200, 201):
+            print(
+                f"  WARN: oracle /attestations returned {r.status_code}: "
+                f"{r.text[:160]}", file=sys.stderr)
 
 
 def main() -> int:
@@ -87,6 +139,9 @@ def main() -> int:
         first_season = max(1, current_season - cfg.attestation.max_lookback_seasons)
 
     changelist: list[dict] = []
+    pending: list[_PendingAttestation] = []   # parallel to inserts so
+                                              # we can POST back after
+                                              # the on-chain write lands
     stats = Counter()
     lower_lookback = cfg.attestation.max_lookback_seasons or "all"
     print(f"[orchard.attest] lookback: seasons {first_season}..{current_season - 1} ({lower_lookback})")
@@ -137,6 +192,15 @@ def main() -> int:
                 # DataLayer batch_update supports delete-then-insert for replaces.
                 changelist.append({"action": "delete", "key": key_hex})
             changelist.append({"action": "insert", "key": key_hex, "value": value_hex})
+            pending.append(_PendingAttestation(
+                node_id=node_id,
+                season=season,
+                hours_online=hours,
+                data_hash=payload["data_hash"],
+                oracle_sig=signed["oracle_sig"],
+                key_hex=key_hex,
+                block_height=block_height,
+            ))
             stats["written"] += 1
             print(
                 f"  + node={node_id[:8]}.. season={season:>4} "
@@ -154,8 +218,21 @@ def main() -> int:
         print(f"ERROR: DataLayer batch_update failed: {e}", file=sys.stderr)
         return 5
     txn_id = result.get("tx_id") or result.get("transaction_id") or "<unknown>"
+    written_at = datetime.now(timezone.utc)
     print(f"[orchard.attest] DataLayer batch_update accepted. tx_id={txn_id}")
     print(f"[orchard.attest] stats: {dict(stats)}")
+
+    # Report back to the oracle so its local DB tracks what's on chain.
+    # Failures here don't roll back the DataLayer write — the chain
+    # state is already accepted. The oracle catches up on the next run.
+    print(f"[orchard.attest] reporting {len(pending)} record(s) back to "
+          f"oracle /attestations …")
+    _report_to_oracle(
+        oracle_url=cfg.oracle.url,
+        pending=pending,
+        tx_id=txn_id,
+        written_at=written_at,
+    )
     return 0
 
 

@@ -125,12 +125,37 @@ def _migrate_node_pass_columns(eng) -> None:
             conn.execute(text(stmt))
 
 
+def _migrate_attestation_chain_columns(eng) -> None:
+    """Phase 5.5: add dl_tx_id, dl_key_hex, block_height_at_write to
+    `attestations`. Same idempotent-ALTER pattern as the node Pass
+    columns. Tracks on-chain identity of each batch_update result so
+    the dashboard's "On chain" card has a tx_id + key to render."""
+    from sqlalchemy import inspect, text
+    insp = inspect(eng)
+    if "attestations" not in insp.get_table_names():
+        return
+    existing_cols = {c["name"] for c in insp.get_columns("attestations")}
+    additions: list[str] = []
+    if "dl_tx_id" not in existing_cols:
+        additions.append("ALTER TABLE attestations ADD COLUMN dl_tx_id VARCHAR(128)")
+    if "dl_key_hex" not in existing_cols:
+        additions.append("ALTER TABLE attestations ADD COLUMN dl_key_hex VARCHAR(256)")
+    if "block_height_at_write" not in existing_cols:
+        additions.append("ALTER TABLE attestations ADD COLUMN block_height_at_write INTEGER")
+    if not additions:
+        return
+    with eng.begin() as conn:
+        for stmt in additions:
+            conn.execute(text(stmt))
+
+
 def create_all() -> None:
     """Called once on app startup. Idempotent."""
     eng = engine()
-    # Pre-existing nodes table is migrated additively before create_all
+    # Pre-existing tables get additive migrations before create_all
     # has a chance to no-op the new columns into existence.
     _migrate_node_pass_columns(eng)
+    _migrate_attestation_chain_columns(eng)
     Base.metadata.create_all(eng)
     # Tighten file perms AFTER the DB file exists. SQLAlchemy creates
     # the file on first connection inside create_all().

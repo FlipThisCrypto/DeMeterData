@@ -117,7 +117,17 @@ class Season(Base):
 
 
 class Attestation(Base):
-    """Per-(node, season) attestation written to DataLayer (Phase 5)."""
+    """Per-(node, season) attestation written to DataLayer (Phase 5).
+
+    Populated by the writer (``orchard_chia.datalayer.main``) after a
+    successful ``batch_update`` — the writer POSTs back to the oracle's
+    /attestations endpoint with the transaction id and the bytes-hex of
+    the key it wrote, so the oracle's local DB tracks what's on chain
+    without the dashboard having to round-trip DataLayer for every
+    render. The signed body the writer pushed to DataLayer is included
+    too (``oracle_sig`` plus data_hash) so anyone with the local DB
+    can cross-check the chain copy without the writer running.
+    """
     __tablename__ = "attestations"
     __table_args__ = (UniqueConstraint("node_id", "season_number", name="uq_attest_node_season"),)
 
@@ -127,5 +137,14 @@ class Attestation(Base):
     hours_online: Mapped[int] = mapped_column(Integer, nullable=False)
     data_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     oracle_sig: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Phase 5.5: chain tracking. dl_tx_id is the Chia DataLayer batch
+    # transaction id (0x...64hex); dl_key_hex is the hex-encoded
+    # `attest:<node>:<season:08d>` key the writer used (the same hex a
+    # third-party verifier feeds to `chia data get_value --key`).
+    # Both nullable so attestations created before this column was
+    # added remain queryable.
+    dl_tx_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    dl_key_hex: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    block_height_at_write: Mapped[int | None] = mapped_column(Integer, nullable=True)
     written_to_datalayer_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

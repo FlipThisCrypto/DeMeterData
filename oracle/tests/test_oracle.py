@@ -371,3 +371,87 @@ def test_pass_verify_cache_hit(client: TestClient, fake_indexer, monkeypatch):
         assert r.status_code == 201, r.text
     # Cache hit on the second call.
     assert calls["n"] == 1
+
+
+# ---------------- Phase 5.5: chain attestation tracking ----------------
+
+def test_record_attestation_unknown_node_404(client: TestClient):
+    """POST /attestations rejects unknown node_id to prevent orphan rows."""
+    r = client.post("/attestations", json={
+        "node_id": "DEADBEEFDEADBEEFDEADBEEFDEADBEEF0",
+        "season_number": 2,
+        "hours_online": 24,
+        "data_hash": "a" * 64,
+        "oracle_sig": "b" * 64,
+        "dl_tx_id":   "0x" + "c" * 64,
+        "dl_key_hex": "61747465737400000",
+    })
+    assert r.status_code == 404
+
+
+def test_record_attestation_happy_then_idempotent(client: TestClient):
+    """First POST creates, second POST for same (node, season) updates."""
+    # Need a node first.
+    client.post("/register",
+                json={"node_id": NODE_ID, "signing_key_hex": KEY_HEX})
+
+    body = {
+        "node_id":               NODE_ID,
+        "season_number":         3,
+        "hours_online":          24,
+        "data_hash":             "a" * 64,
+        "oracle_sig":            "b" * 64,
+        "dl_tx_id":              "0x" + "c" * 64,
+        "dl_key_hex":            "61747465737400000",
+        "block_height_at_write": 8804917,
+    }
+    r1 = client.post("/attestations", json=body)
+    assert r1.status_code == 201, r1.text
+    j1 = r1.json()
+    assert j1["season_number"] == 3
+    assert j1["dl_tx_id"] == body["dl_tx_id"]
+    assert j1["hours_online"] == 24
+
+    # Re-post with new tx_id (re-run scenario) — same row, updated chain pointer.
+    body["dl_tx_id"] = "0x" + "d" * 64
+    r2 = client.post("/attestations", json=body)
+    assert r2.status_code == 201
+    j2 = r2.json()
+    assert j2["dl_tx_id"] == body["dl_tx_id"]
+    # Idempotency: only ONE row exists for (node, season), not two.
+    rAll = client.get(f"/attestations/{NODE_ID}")
+    assert rAll.status_code == 200
+    assert len([row for row in rAll.json() if row["season_number"] == 3]) == 1
+
+    # GET /attestations/<id>/latest returns it.
+    rL = client.get(f"/attestations/{NODE_ID}/latest")
+    assert rL.status_code == 200
+    assert rL.json()["season_number"] == 3
+
+
+def test_latest_attestation_none_when_empty(client: TestClient):
+    """A registered node with no attestations yet returns null."""
+    client.post("/register",
+                json={"node_id": NODE_ID, "signing_key_hex": KEY_HEX})
+    r = client.get(f"/attestations/{NODE_ID}/latest")
+    assert r.status_code == 200
+    assert r.json() is None
+
+
+def test_list_attestations_newest_first(client: TestClient):
+    client.post("/register",
+                json={"node_id": NODE_ID, "signing_key_hex": KEY_HEX})
+    for s in [2, 5, 3, 4]:
+        client.post("/attestations", json={
+            "node_id":      NODE_ID,
+            "season_number": s,
+            "hours_online":  24,
+            "data_hash":     "a" * 64,
+            "oracle_sig":    "b" * 64,
+            "dl_tx_id":      "0x" + f"{s:064d}",
+            "dl_key_hex":    f"00{s:04d}",
+        })
+    r = client.get(f"/attestations/{NODE_ID}")
+    assert r.status_code == 200
+    rows = r.json()
+    assert [row["season_number"] for row in rows] == [5, 4, 3, 2]

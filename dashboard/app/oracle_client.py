@@ -84,3 +84,37 @@ def get_uptime(node_id: str, season: int) -> dict | None:
     if r.status_code != 200:
         raise OracleError(f"GET /uptime/{node_id}/{season} -> {r.status_code}: {r.text}")
     return r.json()
+
+
+def latest_attestation(node_id: str) -> dict | None:
+    """Phase 5.5 — returns the most recent on-chain attestation for
+    the Tree, or None if no attestation has landed yet."""
+    try:
+        r = requests.get(_url(f"/attestations/{node_id}/latest"), timeout=5)
+    except requests.RequestException as e:
+        raise OracleError(f"GET /attestations/{node_id}/latest unreachable: {e}") from e
+    if r.status_code == 404:
+        return None
+    if r.status_code != 200:
+        raise OracleError(
+            f"GET /attestations/{node_id}/latest -> {r.status_code}: {r.text}")
+    j = r.json()
+    return j if j else None  # FastAPI may return null for None
+
+
+def list_attestations(node_id: str, limit: int = 50) -> list[dict]:
+    """All attestations on chain for the Tree, newest first."""
+    try:
+        r = requests.get(
+            _url(f"/attestations/{node_id}"),
+            params={"limit": limit},
+            timeout=5,
+        )
+    except requests.RequestException as e:
+        raise OracleError(f"GET /attestations/{node_id} unreachable: {e}") from e
+    if r.status_code == 404:
+        return []
+    if r.status_code != 200:
+        raise OracleError(
+            f"GET /attestations/{node_id} -> {r.status_code}: {r.text}")
+    return r.json() or []

@@ -297,6 +297,14 @@ def tree_latest(node_id: str):
             except (TypeError, ValueError, AttributeError):
                 pass
 
+        # Phase 5.5: latest on-chain attestation for the "On chain"
+        # card. Nice-to-have; never break the live view if it fails.
+        attestation = None
+        try:
+            attestation = oracle_client.latest_attestation(node_id)
+        except oracle_client.OracleError:
+            pass
+
         return _ok({
             "node": node,
             "readings": readings,
@@ -305,6 +313,7 @@ def tree_latest(node_id: str):
             "last_received_at": last_received_at,
             "current_season": current_season,
             "uptime": uptime,
+            "attestation": attestation,
             "server_now_utc": datetime.now(timezone.utc).isoformat(),
         })
     except oracle_client.OracleError as e:

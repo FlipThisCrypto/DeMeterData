@@ -547,6 +547,63 @@ const OrchardView = (() => {
       `</div>`;
   }
 
+  // Render the "On chain" card from data.attestation. Hidden when the
+  // Tree has no attestation yet (new operator, first Season not closed,
+  // writer not yet run). When present, shows the Season + hours + tx_id
+  // linking to spacescan, plus a copy-paste command the operator can
+  // run on any machine with a Chia full node to independently verify
+  // the chain copy.
+  function renderOnChain(attest) {
+    const card = $('#onchain-card');
+    const body = $('#onchain-body');
+    if (!card || !body) return;
+    if (!attest) {
+      card.hidden = true;
+      body.innerHTML = '';
+      return;
+    }
+    card.hidden = false;
+
+    // tx_id may come back with or without a leading "0x"; Spacescan
+    // accepts either. Trim to a useful display length but keep the
+    // full value in the link.
+    const txId = String(attest.dl_tx_id || '');
+    const txDisplay = txId
+      ? `${txId.slice(0, 10)}…${txId.slice(-6)}`
+      : '—';
+    const txClean = txId.startsWith('0x') ? txId.slice(2) : txId;
+    const spacescanUrl = txClean
+      ? `https://www.spacescan.io/coin/0x${txClean}`
+      : null;
+
+    // The verification command — copy-paste-friendly. We escape via
+    // textContent on the pre to be safe against any future change.
+    const verifyCmd =
+      `chia data get_value \\\n` +
+      `  --id  ${esc(window.ORCHARD_STORE_ID || '<store_id>')} \\\n` +
+      `  --key ${esc(attest.dl_key_hex || '<key_hex>')}`;
+
+    body.innerHTML =
+      makeField('last attested', `Season ${attest.season_number}`) +
+      makeField('hours online', `${attest.hours_online} / 24`) +
+      makeField('signed at',
+                attest.written_to_datalayer_at
+                  ? relativeAge(attest.written_to_datalayer_at)
+                  : '—') +
+      makeField('block height', attest.block_height_at_write ?? '—') +
+      (spacescanUrl
+        ? `<div class="field">` +
+            `<div class="k">tx</div>` +
+            `<div class="v mono"><a href="${esc(spacescanUrl)}" ` +
+              `target="_blank" rel="noopener">${esc(txDisplay)} →</a></div>` +
+          `</div>`
+        : makeField('tx', txDisplay)) +
+      `<div class="field">` +
+        `<div class="k">verify</div>` +
+        `<div class="v"><pre class="mono" style="margin:0">${esc(verifyCmd)}</pre></div>` +
+      `</div>`;
+  }
+
   function renderTree(data) {
     const aliveDot = $('#alive-light');
     const aliveLbl = $('#alive-label');
@@ -564,6 +621,7 @@ const OrchardView = (() => {
     }
 
     renderOperatorCredentials(data.node);
+    renderOnChain(data.attestation);
 
     const latest = data.latest;
     const sensors = latest?.payload?.sensors ?? {};
