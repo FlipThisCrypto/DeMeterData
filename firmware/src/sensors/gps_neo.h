@@ -23,7 +23,14 @@ class GpsNeoSensor : public Sensor {
 
  private:
   void pump_uart_();
+  // True if begin() found a baud rate that produces clean NMEA. False
+  // means we fell back to a default and operators should check wiring.
+  bool try_baud_(uint32_t baud);
   TinyGPSPlus gps_;
+  // Baud rate the driver locked onto at startup. 0 = no clean NMEA at
+  // any tried rate (driver fell back to 9600 and the dashboard will
+  // surface fix=no, satellites=0 indefinitely).
+  uint32_t detected_baud_ = 0;
 };
 
 // Diagnostic: drain any pending bytes on the GPS UART, then write

@@ -269,7 +269,16 @@ const OrchardView = (() => {
             makeField("alt_m", gps.alt_m?.toFixed?.(1) ?? gps.alt_m) +
             makeField("utc",   gps.utc || "—");
         } else {
-          html += makeField("age (ms)", gps.fix_age_ms ?? "—");
+          // No fix → surface the auto-baud diagnostic so an operator
+          // can tell module-silent (baud=0) apart from has-bytes-but-
+          // no-fix (baud > 0, chars > 0, sentences > 0).
+          html +=
+            makeField("baud",      gps.baud != null
+                                     ? (gps.baud === 0 ? "no lock" : gps.baud)
+                                     : "—") +
+            makeField("bytes rx",  gps.chars_processed ?? "—") +
+            makeField("sentences", gps.sentences_passed ?? "—") +
+            makeField("bad checksum", gps.sentences_failed_csum ?? "—");
         }
         return html;
       },
