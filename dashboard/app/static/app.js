@@ -179,6 +179,36 @@ const OrchardView = (() => {
 
   // -------------------------- tree (live) page -----------------------
 
+  // ---- Temperature unit preference (localStorage-persisted) -------
+  // Stored as 'c' (Celsius, default) or 'f' (Fahrenheit). The toggle
+  // button on the Tree page flips this and re-renders immediately;
+  // the choice survives page reloads but is per-browser (no server
+  // round-trip — sensible for a per-operator viewing preference).
+  const TEMP_UNIT_KEY = 'orchard.tempUnit';
+
+  function getTempUnit() {
+    try {
+      return (localStorage.getItem(TEMP_UNIT_KEY) === 'f') ? 'f' : 'c';
+    } catch {
+      return 'c';   // localStorage unavailable (private mode, etc.)
+    }
+  }
+  function setTempUnit(u) {
+    try { localStorage.setItem(TEMP_UNIT_KEY, u); } catch {}
+  }
+
+  // Format a Celsius value for display, respecting the current
+  // operator preference. Numbers come off the wire as Celsius (the
+  // firmware's native unit and the SI standard); conversion happens
+  // only at display time, so the stored data in the oracle DB stays
+  // unit-canonical.
+  function formatTemp(c, decimals = 1) {
+    if (c === null || c === undefined) return '—';
+    const u = getTempUnit();
+    const v = (u === 'f') ? c * 9 / 5 + 32 : c;
+    return `${v.toFixed(decimals)} °${u.toUpperCase()}`;
+  }
+
   // Per-sensor render config. Adding a new known sensor = add a key
   // here with its display title and field list; the dashboard tile
   // appears automatically the next time a Tree reports that sensor.
@@ -201,16 +231,16 @@ const OrchardView = (() => {
     bme280: {
       title: "BME280 — temp / humidity / pressure",
       fields: [
-        ["temperature",  v => `${v?.toFixed?.(1) ?? "—"} °C`,   "temperature_c"],
-        ["humidity",     v => `${v?.toFixed?.(1) ?? "—"} %`,    "humidity_pct"],
-        ["pressure",     v => `${v?.toFixed?.(2) ?? "—"} hPa`,  "pressure_hpa"],
-        ["i2c address",  v => v ? `0x${v.toString(16)}` : "—",  "i2c_addr"],
+        ["temperature",  v => formatTemp(v, 1),                  "temperature_c"],
+        ["humidity",     v => `${v?.toFixed?.(1) ?? "—"} %`,     "humidity_pct"],
+        ["pressure",     v => `${v?.toFixed?.(2) ?? "—"} hPa`,   "pressure_hpa"],
+        ["i2c address",  v => v ? `0x${v.toString(16)}` : "—",   "i2c_addr"],
       ],
     },
     ds18b20: {
       title: "DS18B20 — 1-Wire temperature probe",
       fields: [
-        ["temperature",   v => `${v?.toFixed?.(2) ?? "—"} °C`,   "temperature_c"],
+        ["temperature",   v => formatTemp(v, 2),                  "temperature_c"],
         ["probes on bus", v => v,                                 "device_count"],
         ["rom id",        v => v,                                 "rom_id"],
       ],
@@ -330,12 +360,34 @@ const OrchardView = (() => {
   }
 
   let pollTimer = null;
+  let lastTreeData = null;     // cached so the toggle can re-render
+                               // immediately without waiting for poll
   async function pollTree() {
     const r = await jget(`/api/tree/${encodeURIComponent(window.NODE_ID)}/latest`);
-    if (r.ok) renderTree(r.body);
+    if (r.ok) {
+      lastTreeData = r.body;
+      renderTree(r.body);
+    }
+  }
+
+  function updateTempUnitButton() {
+    const btn = $('#temp-unit-toggle');
+    if (!btn) return;
+    btn.textContent = `°${getTempUnit().toUpperCase()}`;
   }
 
   function initTreePage() {
+    updateTempUnitButton();
+    const btn = $('#temp-unit-toggle');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        setTempUnit(getTempUnit() === 'c' ? 'f' : 'c');
+        updateTempUnitButton();
+        // Re-render the cached payload immediately so the operator
+        // sees the unit flip without a 5-second wait.
+        if (lastTreeData) renderTree(lastTreeData);
+      });
+    }
     pollTree();
     pollTimer = setInterval(pollTree, 5000);
   }

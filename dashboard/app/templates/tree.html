@@ -11,11 +11,13 @@
 
 <section class="card status">
   <div id="alive-light" class="dot dot-grey">●</div>
-  <div>
+  <div style="flex:1">
     <strong id="alive-label">Waiting for first reading…</strong>
     <div class="muted" id="last-age">Last reading: —</div>
     <div class="muted" id="uptime-line">Uptime this Season: —</div>
   </div>
+  <button id="temp-unit-toggle" class="btn"
+          title="Toggle temperature unit (persists in this browser)">°C</button>
 </section>
 
 <!-- One tile per sensor reported by the Tree. Populated by app.js
