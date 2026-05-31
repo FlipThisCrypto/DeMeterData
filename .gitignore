@@ -40,6 +40,12 @@ firmware/CMakeFiles/
 *.bin
 *.hex
 
+# Exception: the merged web-flasher firmware images ARE committed —
+# they're the production artifact a browser flasher needs to serve.
+# Bins under flasher/ are reproducible from firmware/ source via
+# `esptool merge-bin` (see flasher/README.md).
+!flasher/**/*.bin
+
 # --- Node (future dashboard frontend bits) ---
 node_modules/
 npm-debug.log
@@ -98,6 +104,11 @@ orchard_chia/config.yaml
 orchard_chia/data/
 oracle/.env
 dashboard/.env
+
+# Operator's local mint plan (has addresses + final URIs). The
+# .example.yaml template stays in git for other contributors.
+nft/mint_plan.yaml
+nft/mint_results.json
 
 # --- Claude / dev tooling local state ---
 .claude/

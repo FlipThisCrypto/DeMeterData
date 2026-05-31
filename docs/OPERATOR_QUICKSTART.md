@@ -153,9 +153,7 @@ The Freenove breakout has **two labels per hole**: one column for ESP32 (classic
 
 Without an antenna, the WROOM-32U has ~1 m of effective WiFi range. With one, you should see -50 to -60 dBm RSSI in a typical home setup.
 
-### Optional BME280
-
-If you bought a BME280:
+### Optional BME280 (temperature + humidity + pressure, I2C)
 
 | Wire to | ESP32 pin (WROOM and S3) |
 |---|---|
@@ -165,6 +163,26 @@ If you bought a BME280:
 | SCL | GPIO 22 |
 
 The firmware auto-detects whether it's at I2C address 0x76 or 0x77.
+
+### Optional DS18B20 (1-Wire temperature probe)
+
+The classic 3-wire waterproof temperature probe with the long cable. Often comes with a 4.7 kΩ resistor pre-wired in a heat-shrink tube near the connector — if yours does, you're good. If yours is a bare TO-92 chip, you'll need to add the resistor yourself.
+
+| Wire to | ESP32 pin (WROOM and S3) | Probe wire color (typical) |
+|---|---|---|
+| VCC | 3.3V (NOT 5V — DS18B20 is 3.3V) | Red |
+| GND | GND | Black |
+| DATA | GPIO 25 | Yellow |
+| **4.7 kΩ resistor** | between DATA and 3.3V | — |
+
+The pull-up resistor is **not optional**. Without it the 1-Wire bus floats and the chip never responds — the boot log will show `bme280 active=no` *and* `ds18b20 active=no` regardless of how many sensors you've actually connected. If you flash a Tree with a DS18B20 wired but no pull-up, the firmware prints a hint to serial:
+
+```
+[ds18b20] no devices on 1-Wire bus — check 4.7k pull-up
+between DATA and VCC, and DATA wire on the configured GPIO.
+```
+
+Multiple DS18B20s can share one data wire (1-Wire bus). v1 firmware reads the first one it finds; the JSON payload includes `device_count` so you can see when more are physically connected than the driver is reading.
 
 ### Sanity check before powering on
 

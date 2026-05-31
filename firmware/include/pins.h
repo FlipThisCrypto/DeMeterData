@@ -37,6 +37,18 @@
 #define ORCHARD_PIN_MQ135_ADC  34
 #endif
 
+// --- DS18B20 1-Wire temperature probe -------------------------------
+// GPIO 25 on WROOM-32U: regular bidirectional GPIO, not a strapping
+// pin, not input-only. On S3 the same number is available.
+//
+// REQUIRED EXTERNAL PARTS: 4.7 kΩ pull-up resistor between this pin
+// and 3.3V. Waterproof DS18B20 probe kits usually include one in a
+// heat-shrink tube near the connector; bare TO-92 chips do NOT.
+// Without the pull-up the sensor never responds.
+#ifndef ORCHARD_PIN_DS18B20_DATA
+#define ORCHARD_PIN_DS18B20_DATA  25
+#endif
+
 // --- Status LED (Freenove S3 onboard) -------------------------------
 #ifndef ORCHARD_PIN_STATUS_LED
 #define ORCHARD_PIN_STATUS_LED  48
