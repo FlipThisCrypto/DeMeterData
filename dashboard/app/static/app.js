@@ -41,7 +41,16 @@ const OrchardView = (() => {
 
   function relativeAge(iso) {
     if (!iso) return '—';
-    const then = Date.parse(iso);
+    // The oracle's stored timestamps are naive UTC. Date.parse on a
+    // string with no tz designator interprets as LOCAL per the spec,
+    // which produced negative-age clamps and bogus "just now" labels.
+    // Append Z when the string is missing a tz so Date treats it as
+    // UTC and the math matches the server's alive check.
+    let s = iso;
+    if (!/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) {
+      s = s + 'Z';
+    }
+    const then = Date.parse(s);
     if (isNaN(then)) return iso;
     const ageSec = Math.max(0, Math.floor((Date.now() - then) / 1000));
     if (ageSec < 5) return 'just now';

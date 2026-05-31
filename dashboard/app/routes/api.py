@@ -229,7 +229,14 @@ def tree_latest(node_id: str):
         if readings:
             last_received_at = readings[0].get("received_at")
             try:
-                dt = datetime.fromisoformat(last_received_at.replace("Z", "+00:00"))
+                iso = last_received_at.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(iso)
+                # Oracle stores naive UTC strings; treat any missing tz
+                # as UTC rather than letting aware-vs-naive subtract
+                # raise and silently force `alive=False` (which would
+                # mark fresh-but-naive timestamps "Stale" forever).
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
                 age = (datetime.now(timezone.utc) - dt).total_seconds()
                 alive = age < 180  # default sample interval is 60s; 3x for tolerance
             except (TypeError, ValueError, AttributeError):
